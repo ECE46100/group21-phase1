@@ -1,6 +1,7 @@
 {
   "name": "group21-phase1",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,15 +9,16 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    
-  },
   "devDependencies": {
-    "typescript": "^5.5.4",
     "@eslint/js": "^9.9.1",
     "@types/eslint__js": "^8.42.3",
     "eslint": "^9.9.1",
-    "typescript-eslint": "^8.4.0",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.4.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "simple-git": "^3.26.0"
   }
 }
