@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Function to install dependencies (sort of)
+install() {
+    echo "start installing dependencies..."
+    npm install
+    if [ $? -eq 0 ]; then
+        echo "Dependencies installed successfully."
+        exit 0
+    else
+        echo "Failed to install dependencies."
+        exit 1
+    fi
+}
+
+# Function to run tests (sort of)
+run_tests() {
+    echo "start testing project"
+    # npx ts-node src/processUrls.ts src/input.txt
+    # npm test    
+    # if [ $? -eq 0 ]; then
+    #     echo "All tests passed."
+    #     exit 0
+    # else
+    #     echo "Some tests failed."
+    #     exit 1
+    # fi
+}
+
+# Function to process URLs using TypeScript
+process_urls() {
+    echo "start processing urls..."
+    URL_FILE=$1
+    if [ -f "$URL_FILE" ]; then
+        npx ts-node src/processUrls.ts "$URL_FILE"
+        # To make it faster : pre-compile the processUrl.ts and just run the js file as below
+        # node src/processUrls.js "$URL_FILE"
+        if [ $? -eq 0 ]; then
+            exit 0
+        else
+            exit 1
+        fi
+    else
+        echo "File not found: $URL_FILE"
+        exit 1
+    fi
+}
+
+
+# Main script logic
+case "$1" in
+    install)
+        install
+        ;;
+    test)
+        run_tests
+        ;;
+    *)
+        if [ -n "$1" ]; then
+            process_urls "$1"
+        else
+            echo "Usage: ./run {install|URL_FILE|test}"
+            exit 1
+        fi
+        ;;
+esac
