@@ -1,9 +1,8 @@
 # group21-phase1
 
 ## Setup
-1. Install node and npm and the eslint vscode extension
-2. Run `npm init`
-3. Run `npm i`
-
+1. Clone repo : git clone
+2. Install dependencies : in git bash run "./run install"
+   
 ## Running
-Either `npx ts-node <file>` or `npx tsc <file>` and then `node <file>`.
+1. To run for a file containing URLs : `./run /URL_files/`
