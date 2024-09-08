@@ -236,7 +236,7 @@ function processURLs(filePath) {
  * @description Handles the output of the result, error message, or log file.
  * @param {string} message - The message to log.
  * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
- * @param {Error} errorMessage - Optional error message to log.
+ * @param {string} errorMessage - Optional error message to log.
  */
 function handleOutput() {
     return __awaiter(this, arguments, void 0, function (message, errorMessage, endpoint) {
@@ -270,11 +270,9 @@ function handleOutput() {
     });
 }
 /* Entry point */
-if (require.main == module) {
-    var filePath = process.argv[2];
-    if (!filePath) {
-        handleOutput('', 'Error: Please provide the URL file path as an argument.');
-        process.exit(1);
-    }
-    processURLs(filePath);
+var filePath = process.argv[2];
+if (!filePath) {
+    handleOutput('', 'Error: Please provide the URL file path as an argument.');
+    process.exit(1);
 }
+processURLs(filePath);

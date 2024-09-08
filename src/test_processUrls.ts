@@ -1,4 +1,4 @@
-import { processURLs } from './processUrls.js';
+import { processURLs } from './processUrls';
 
 const filePath = 'input.txt';
 console.log('Running processURLs');

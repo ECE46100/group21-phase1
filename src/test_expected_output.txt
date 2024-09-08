@@ -1,0 +1,27 @@
+$ ./run src/test_input.txt
+start processing urls...
+Cloning GitHub repo: https://github.com/cloudinary/cloudinary_npm
+Cloned https://github.com/cloudinary/cloudinary_npm successfully.
+
+npm converted to GitHub Url : https://github.com/expressjs/express.git
+Cloning GitHub repo: https://github.com/expressjs/express.git
+Cloned https://github.com/expressjs/express.git successfully.
+
+Cloning GitHub repo: https://github.com/nullivex/nodist
+Cloned https://github.com/nullivex/nodist successfully.
+
+Cloning GitHub repo: httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git
+Failed to clone httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git. Error: Cloning into './cloned_repos/midas1214 hw1_github_tutorial.git'...
+git: 'remote-httpsasdfasdf' is not a git command. See 'git --help'.
+
+Cloning GitHub repo: https://github.com/lodash/lodash
+Cloned https://github.com/lodash/lodash successfully.
+
+npm converted to GitHub Url : ssh://git@github.com/browserify/browserify.git
+Cloning GitHub repo: ssh://git@github.com/browserify/browserify.git
+Cloned ssh://git@github.com/browserify/browserify.git successfully.
+
+Cloning GitHub repo: https://github.com/midas1214/hw1_github_tutorial.git
+Cloned https://github.com/midas1214/hw1_github_tutorial.git successfully.
+
+

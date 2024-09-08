@@ -3,14 +3,14 @@
 # Function to install dependencies (sort of)
 install() {
     echo "start installing dependencies..."
-    # npm install
-    # if [ $? -eq 0 ]; then
-    #     echo "Dependencies installed successfully."
-    #     exit 0
-    # else
-    #     echo "Failed to install dependencies."
-    #     exit 1
-    # fi
+    npm install
+    if [ $? -eq 0 ]; then
+        echo "Dependencies installed successfully."
+        exit 0
+    else
+        echo "Failed to install dependencies."
+        exit 1
+    fi
 }
 
 # Function to run tests (sort of)
@@ -33,6 +33,7 @@ process_urls() {
     URL_FILE=$1
     if [ -f "$URL_FILE" ]; then
         npx ts-node src/processUrls.ts "$URL_FILE"
+        # To make it faster : pre-compile the processUrl.ts and just run the js file as below
         # node src/processUrls.js "$URL_FILE"
         if [ $? -eq 0 ]; then
             exit 0
@@ -59,7 +60,6 @@ case "$1" in
             process_urls "$1"
         else
             echo "Usage: ./run {install|URL_FILE|test}"
-            echo "Hello! This is a test message."
             exit 1
         fi
         ;;
