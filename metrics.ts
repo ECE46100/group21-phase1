@@ -130,7 +130,7 @@ function metricSample(): Promise<number> {
 
 function metricSample_1(): Promise<number> {
     const score = 1;
-    return new Promise((resolve) => { resolve(score); });
+    return new Promise((resolve) => { setTimeout(() => { resolve(score); }, 1000); });
 }
 
 
