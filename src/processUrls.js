@@ -133,8 +133,8 @@ function classifyAndConvertURL(url) {
                     response = _b.sent();
                     repositoryUrl = (_a = response.data.repository) === null || _a === void 0 ? void 0 : _a.url;
                     if (repositoryUrl && repositoryUrl.includes('github.com')) {
-                        githubUrl = repositoryUrl.replace(/^git\+/, '');
-                        handleOutput("Found GitHub Url : ".concat(githubUrl), '');
+                        githubUrl = repositoryUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/') + '.git';
+                        handleOutput("npm converted to GitHub Url : ".concat(githubUrl), '');
                         return [2 /*return*/, githubUrl];
                     }
                     else {
@@ -146,7 +146,7 @@ function classifyAndConvertURL(url) {
                     handleOutput('', "Failed to retrieve npm package data: ".concat(packageName, "\n, Error message: ").concat(error_1));
                     return [3 /*break*/, 5];
                 case 5:
-                    handleOutput('', "Unknown URL type: ".concat(url));
+                    handleOutput('', "Unknown URL type: ".concat(url, "\n"));
                     return [2 /*return*/, null];
             }
         });
@@ -157,6 +157,7 @@ function classifyAndConvertURL(url) {
  * @description Clones a GitHub repository.
  * @param {string} repoUrl - The URL of the GitHub repository.
  * @param {string} targetDir - The directory where the repo should be cloned.
+ * @returns {Promise<void>}
  */
 function cloneRepo(repoUrl, targetDir) {
     return __awaiter(this, void 0, void 0, function () {
@@ -171,11 +172,11 @@ function cloneRepo(repoUrl, targetDir) {
                     return [4 /*yield*/, git.clone(repoUrl, targetDir)];
                 case 2:
                     _a.sent();
-                    handleOutput("Cloned ".concat(repoUrl, " successfully."), '');
+                    handleOutput("Cloned ".concat(repoUrl, " successfully.\n"), '');
                     return [3 /*break*/, 4];
                 case 3:
                     error_2 = _a.sent();
-                    handleOutput('', "Failed to clone ".concat(repoUrl, ":"));
+                    handleOutput('', "Failed to clone ".concat(repoUrl, ". ").concat(error_2));
                     return [3 /*break*/, 4];
                 case 4: return [2 /*return*/];
             }
@@ -233,10 +234,10 @@ function processURLs(filePath) {
 }
 /**
  * @function handleOutput
- * @description Handles the output of the result, error message, or log file.
- * @param {string} message - The message to log.
- * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
+ * @description Handles the output of the result, error message, or log file. At least one of the message/errorMessage must be specified.
+ * @param {string} message - Optional message to log.
  * @param {string} errorMessage - Optional error message to log.
+ * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
  */
 function handleOutput() {
     return __awaiter(this, arguments, void 0, function (message, errorMessage, endpoint) {
@@ -248,10 +249,8 @@ function handleOutput() {
                 case 0: {
                     if (message != '')
                         console.log(message);
-                    if (errorMessage != '') {
-                        console.error(new Error(errorMessage));
-                        // console.log(errorMessage + '\n');
-                    }
+                    if (errorMessage != '')
+                        console.error(errorMessage);
                     break;
                 }
                 case 1: {
@@ -270,9 +269,12 @@ function handleOutput() {
     });
 }
 /* Entry point */
-var filePath = process.argv[2];
-if (!filePath) {
-    handleOutput('', 'Error: Please provide the URL file path as an argument.');
-    process.exit(1);
+if (require.main === module) {
+    var filePath = process.argv[2];
+    if (!filePath) {
+        handleOutput('', 'Error: Please provide the URL file path as an argument.');
+        process.exit(1);
+    }
+    processURLs(filePath);
 }
-processURLs(filePath);
+exports.default = processURLs;

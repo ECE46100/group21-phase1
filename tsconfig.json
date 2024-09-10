@@ -109,6 +109,6 @@
     "src/*.ts",
   ],
   "exclude": [
-    "src/cloned_repos.ts",
+    "src/cloned_repos/*.ts",
   ]
 }

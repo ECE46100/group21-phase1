@@ -134,10 +134,13 @@ async function handleOutput(message: string = '', errorMessage: string = '', end
 }
 
 /* Entry point */
-const filePath = process.argv[2];
-if (!filePath) {
-    handleOutput('', 'Error: Please provide the URL file path as an argument.')
-    process.exit(1);
+if (require.main === module) {
+    const filePath = process.argv[2];
+    if (!filePath) {
+        handleOutput('', 'Error: Please provide the URL file path as an argument.')
+        process.exit(1);
+    }
+    processURLs(filePath);
 }
 
-processURLs(filePath);
+export default processURLs
