@@ -46,7 +46,7 @@ async function classifyAndConvertURL(url: string): Promise<string | null> {
             const repositoryUrl = response.data.repository?.url;
 
             if (repositoryUrl && repositoryUrl.includes('github.com')) {
-                /* Convert git+https://github.com/ to https://github.com/ */
+                /* Convert git+https://github.com/ and ssh to https://github.com/ */
                 const githubUrl = repositoryUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/') + '.git';
                 handleOutput(`npm converted to GitHub Url : ${githubUrl}`, '');
                 return githubUrl;
