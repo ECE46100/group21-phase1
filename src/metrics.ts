@@ -170,6 +170,7 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
     let score = 0;
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
+        if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
         const totalIssues = await countIssue(owner, packageName, 'all');
         const openIssues = await countIssue(owner, packageName, 'open');
 
@@ -195,6 +196,7 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
 async function busFactor(packageUrl: string, packagePath: string): Promise<number> {
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
+        if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
         /* Trace back at most a year from today */
         const since = new Date();
         since.setFullYear(since.getFullYear() - 1);

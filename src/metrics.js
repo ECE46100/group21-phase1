@@ -145,6 +145,7 @@ function metricsRunner(metricFn, packageUrl, packagePath) {
 }
 /**
  * @function countIssue
+ * @description A function that returns #issues in 'state'(ex: closed) from given repo information using GH API
  * @param {string} owner - the owner of the repo, we use this to construct the endpoint for API call
  * @param {string} packageName - package's name, used to construct API as well
  * @param {string} status - the status of the kinf of issue we want to get, like 'closed'
@@ -163,7 +164,7 @@ function countIssue(owner, repo, state) {
                                 Authorization: "token ".concat(GITHUB_TOKEN)
                             },
                             params: {
-                                per_page: 1 // To avoid fetching full data, we'll just look at the "Link" header for pagination
+                                per_page: 1 /* Avoid fetching full data by looking at only the "Link" header for pagination */
                             }
                         })];
                 case 1:
@@ -175,7 +176,7 @@ function countIssue(owner, repo, state) {
                             return [2 /*return*/, parseInt(lastPageMatch[1], 10)];
                         }
                     }
-                    return [2 /*return*/, response.data.length]; // Fallback if there is no pagination
+                    return [2 /*return*/, response.data.length];
                 case 2:
                     error_1 = _a.sent();
                     console.error("Error fetching ".concat(state, " issues for ").concat(owner, "/").concat(repo, ":"), error_1);
@@ -188,7 +189,10 @@ function countIssue(owner, repo, state) {
 /**
  * @function maintainerActiveness
  * @description A metric that uses GH API to get (1- #openIssue/#allIssue) as maintainerActiveness score.
- * @returns {number} score - A number representing the score ([0, 1])
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {number} score - The score for maintainerActiveness, calculated as (1- #openIssue/#allIssue),
+ *                           if no issue was found it returns 1.
  */
 function maintainerActiveness(packageUrl, packagePath) {
     return __awaiter(this, void 0, void 0, function () {
@@ -201,6 +205,8 @@ function maintainerActiveness(packageUrl, packagePath) {
                     _b.label = 1;
                 case 1:
                     _b.trys.push([1, 4, , 5]);
+                    if (GITHUB_TOKEN == '')
+                        throw new Error('No GitHub token specified');
                     return [4 /*yield*/, countIssue(owner, packageName, 'all')];
                 case 2:
                     totalIssues = _b.sent();
@@ -223,11 +229,11 @@ function maintainerActiveness(packageUrl, packagePath) {
 ;
 /**
  * @function busFactor
-* @description A metric that calculates the number of contributors with 5+ commits in the last year.
-* @param {string} packageUrl - The GitHub repository URL.
-* @param {string} packagePath - (Not used here, but required for type compatibility).
-* @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
-*/
+ * @description A metric that calculates the number of contributors with 5+ commits in the last year.
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
+ */
 function busFactor(packageUrl, packagePath) {
     return __awaiter(this, void 0, void 0, function () {
         var _a, owner, packageName, since, url, response, commits, contributorCommits_1, activeContributors, score, error_3;
@@ -238,6 +244,8 @@ function busFactor(packageUrl, packagePath) {
                     _b.label = 1;
                 case 1:
                     _b.trys.push([1, 3, , 4]);
+                    if (GITHUB_TOKEN == '')
+                        throw new Error('No GitHub token specified');
                     since = new Date();
                     since.setFullYear(since.getFullYear() - 1);
                     url = "https://api.github.com/repos/".concat(owner, "/").concat(packageName, "/commits");
