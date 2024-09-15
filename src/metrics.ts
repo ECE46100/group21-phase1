@@ -125,6 +125,7 @@ async function metricsRunner(metricFn: metricFunction, packageUrl: string, packa
 
 /**
  * @function countIssue
+ * @description A function that returns #issues in 'state'(ex: closed) from given repo information using GH API
  * @param {string} owner - the owner of the repo, we use this to construct the endpoint for API call
  * @param {string} packageName - package's name, used to construct API as well
  * @param {string} status - the status of the kinf of issue we want to get, like 'closed'
@@ -138,30 +139,32 @@ async function countIssue(owner: string, repo: string, state: string): Promise<n
                 Authorization: `token ${GITHUB_TOKEN}`
             },
             params: {
-                per_page: 1 // To avoid fetching full data, we'll just look at the "Link" header for pagination
+                per_page: 1 /* Avoid fetching full data by looking at only the "Link" header for pagination */
             }
         });
         
         const linkHeader = response.headers.link;
         if (linkHeader) {
-            // Parse the "last" page from the pagination links
+            /* Parse the "last" page from the pagination links */
             const lastPageMatch = linkHeader.match(/&page=(\d+)>; rel="last"/);
             if (lastPageMatch) {
                 return parseInt(lastPageMatch[1], 10);
             }
         }
-        return response.data.length; // Fallback if there is no pagination
+        return response.data.length;
     } catch (error) {
         console.error(`Error fetching ${state} issues for ${owner}/${repo}:`, error);
         return 0;
     }
 }
 
-
 /**
  * @function maintainerActiveness
  * @description A metric that uses GH API to get (1- #openIssue/#allIssue) as maintainerActiveness score.
- * @returns {number} score - A number representing the score ([0, 1])
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {number} score - The score for maintainerActiveness, calculated as (1- #openIssue/#allIssue), 
+ *                           if no issue was found it returns 1.
  */
 async function maintainerActiveness(packageUrl: string, packagePath: string): Promise<number> {
     let score = 0;
@@ -184,11 +187,11 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
 
 /**
  * @function busFactor
-* @description A metric that calculates the number of contributors with 5+ commits in the last year.
-* @param {string} packageUrl - The GitHub repository URL.
-* @param {string} packagePath - (Not used here, but required for type compatibility).
-* @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
-*/
+ * @description A metric that calculates the number of contributors with 5+ commits in the last year.
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
+ */
 async function busFactor(packageUrl: string, packagePath: string): Promise<number> {
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
