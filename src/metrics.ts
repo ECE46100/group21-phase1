@@ -9,13 +9,18 @@
 // import * as fs from 'fs';
 import * as threading from 'worker_threads';
 import { cpus } from 'os';
+import axios from 'axios';
+import { handleOutput, getOwnerAndPackageName } from './util';
+import * as dotenv from 'dotenv';
+dotenv.config();
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? ''
 
 /**
  * @type metricFunction
  * @description Type for metric calculating functions, should only return the result of the calculation.
  */
 type metricFunction = (packageUrl: string, packagePath: string) => Promise<number>;
-const metrics: metricFunction[] = [metricSample, metricSample_1];
+const metrics: metricFunction[] = [busFactor, maintainerActiveness];
 
 /**
  * @interface metricPair
@@ -108,10 +113,10 @@ async function computeMetrics(packageUrl: string, packagePath: string): Promise<
  * @param metricFunction - The function to run to collect a given metric.
  * @returns {number[]} - A pair of numbers representing the score ([0, 1]) and the latency in seconds.
  */
-async function metricsRunner(metricFn: metricFunction, packagePath: string, packageUrl: string): Promise<number[]> {
+async function metricsRunner(metricFn: metricFunction, packageUrl: string, packagePath: string): Promise<number[]> {
     /* start the timer */
     const startTime = Date.now();
-    const score: number = await metricFn(packagePath, packageUrl);
+    const score: number = await metricFn(packageUrl, packagePath);
     /* stop the timer */
     const latency = (Date.now() - startTime) / 1000;
 
@@ -119,26 +124,119 @@ async function metricsRunner(metricFn: metricFunction, packagePath: string, pack
 }
 
 /**
- * @function metricSample
- * @description This function is used to sample a metric.
- * @returns {number} score - A pair of numbers representing the score ([0, 1]) and the latency in seconds.
+ * @function countIssue
+ * @param {string} owner - the owner of the repo, we use this to construct the endpoint for API call
+ * @param {string} packageName - package's name, used to construct API as well
+ * @param {string} status - the status of the kinf of issue we want to get, like 'closed'
+ * @returns {number} count - the number of issue in the status specified
  */
-function metricSample(): Promise<number> {
-    const score = 0.5;
-    return new Promise((resolve) => { resolve(score); });
-};
-
-function metricSample_1(): Promise<number> {
-    const score = 1;
-    return new Promise((resolve) => { setTimeout(() => { resolve(score); }, 1000); });
+async function countIssue(owner: string, repo: string, state: string): Promise<number> {
+    try {
+        const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=${state}`;
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `token ${GITHUB_TOKEN}`
+            },
+            params: {
+                per_page: 1 // To avoid fetching full data, we'll just look at the "Link" header for pagination
+            }
+        });
+        
+        const linkHeader = response.headers.link;
+        if (linkHeader) {
+            // Parse the "last" page from the pagination links
+            const lastPageMatch = linkHeader.match(/&page=(\d+)>; rel="last"/);
+            if (lastPageMatch) {
+                return parseInt(lastPageMatch[1], 10);
+            }
+        }
+        return response.data.length; // Fallback if there is no pagination
+    } catch (error) {
+        console.error(`Error fetching ${state} issues for ${owner}/${repo}:`, error);
+        return 0;
+    }
 }
 
+
+/**
+ * @function maintainerActiveness
+ * @description A metric that uses GH API to get (1- #openIssue/#allIssue) as maintainerActiveness score.
+ * @returns {number} score - A number representing the score ([0, 1])
+ */
+async function maintainerActiveness(packageUrl: string, packagePath: string): Promise<number> {
+    let score = 0;
+    const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+    try {
+        const totalIssues = await countIssue(owner, packageName, 'all');
+        const openIssues = await countIssue(owner, packageName, 'open');
+
+        if (totalIssues === 0) {
+            return 1; /* No issue at all, the score here can be changed later */
+        }
+
+        score = 1 - (openIssues / totalIssues);
+    } catch (error) {
+        throw new Error(`Error calculating maintaine activeness\nError message : ${error}`)
+    }
+
+    return score;
+};
+
+/**
+ * @function busFactor
+* @description A metric that calculates the number of contributors with 5+ commits in the last year.
+* @param {string} packageUrl - The GitHub repository URL.
+* @param {string} packagePath - (Not used here, but required for type compatibility).
+* @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
+*/
+async function busFactor(packageUrl: string, packagePath: string): Promise<number> {
+    const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+    try {
+        /* Trace back at most a year from today */
+        const since = new Date();
+        since.setFullYear(since.getFullYear() - 1);
+        const url = `https://api.github.com/repos/${owner}/${packageName}/commits`;
+        const response = await axios.get(url, {
+            params: {
+                since: since.toISOString(),
+                per_page: 100, /* This is just a rough guess */
+            },
+            headers: {
+                Authorization: `token ${GITHUB_TOKEN}`
+            }
+        });
+
+        const commits = response.data;
+
+        if (!commits || commits.length === 0) return 0; /* No contributors found in the last year */
+
+        /* Map to keep track of each contributor's commit count */
+        const contributorCommits: { [key: string]: number } = {};
+
+        /* Count commits per author */
+        commits.forEach((commit: any) => {
+            const author = commit.author?.login;
+            if (author) {
+                contributorCommits[author] = (contributorCommits[author] || 0) + 1;
+            }
+        });
+
+        /* Filter contributors with 5+ commits */
+        const activeContributors = Object.values(contributorCommits).filter(commitCount => commitCount >= 5).length;
+        const score = activeContributors >= 10 ? 1 : activeContributors / 10;
+
+        return score;
+    } catch (error) {
+        console.error(`Error calculating activeContributorsMetric: ${error}`);
+        return 0;
+    }
+}
 
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData as { metricIndex: number, url: string, path: string };
     const metric = metrics[metricIndex];
     threading.parentPort?.once('message', (childPort: {hereIsYourPort: threading.MessagePort}) => {
-        metricsRunner(metric, path, url).then((metricResult) => {
+        metricsRunner(metric, url, path).then((metricResult) => {
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: metricResult });
             childPort.hereIsYourPort.close();
         }).catch((error: unknown) => {
