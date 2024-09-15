@@ -96,7 +96,7 @@ export async function processURLs(filePath: string): Promise<void> {
                 const packageName = splitArray.pop();
                 const ownerName = splitArray.pop();
                 handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
-                await cloneRepo(githubUrl, `./cloned_repos/${ownerName} ${packageName}`);
+                await cloneRepo(githubUrl, `./cloned_repos/${ownerName}/${packageName}`);
             }
             else
             {
