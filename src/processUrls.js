@@ -49,6 +49,8 @@ var readline = require("readline");
 var simple_git_1 = require("simple-git");
 var axios_1 = require("axios");
 var url_1 = require("url");
+var util_1 = require("./util");
+var metrics_1 = require("./metrics");
 /**
  * @function readURLFile
  * @description Reads a file line by line and extracts the URLs.
@@ -129,7 +131,7 @@ function classifyAndConvertURL(urlString) {
                     if (!(parsedUrl.hostname === 'www.npmjs.com')) return [3 /*break*/, 6];
                     packageName = parsedUrl.pathname.split('/').pop();
                     if (!packageName) {
-                        handleOutput('', "Invalid npm URL: ".concat(urlString));
+                        (0, util_1.handleOutput)('', "Invalid npm URL: ".concat(urlString));
                         return [2 /*return*/, null];
                     }
                     _b.label = 2;
@@ -142,25 +144,25 @@ function classifyAndConvertURL(urlString) {
                     if (repoUrl && repoUrl.includes('github.com')) {
                         githubUrl = new url_1.URL(repoUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/'));
                         githubUrl.pathname += '.git';
-                        handleOutput("npm converted to GitHub URL: ".concat(githubUrl.toString()), '');
+                        (0, util_1.handleOutput)("npm converted to GitHub URL: ".concat(githubUrl.toString()), '');
                         return [2 /*return*/, githubUrl];
                     }
                     else {
-                        handleOutput('', "No GitHub repository found for npm package: ".concat(packageName));
+                        (0, util_1.handleOutput)('', "No GitHub repository found for npm package: ".concat(packageName));
                     }
                     return [3 /*break*/, 5];
                 case 4:
                     error_1 = _b.sent();
-                    handleOutput('', "Failed to retrieve npm package data: ".concat(packageName, "\nError message: ").concat(error_1));
+                    (0, util_1.handleOutput)('', "Failed to retrieve npm package data: ".concat(packageName, "\nError message: ").concat(error_1));
                     return [3 /*break*/, 5];
                 case 5: return [3 /*break*/, 7];
                 case 6:
-                    handleOutput('', "Unknown URL type: ".concat(urlString, ", neither GitHub nor npm"));
+                    (0, util_1.handleOutput)('', "Unknown URL type: ".concat(urlString, ", neither GitHub nor npm"));
                     _b.label = 7;
                 case 7: return [3 /*break*/, 9];
                 case 8:
                     error_2 = _b.sent();
-                    handleOutput('', "Failed to parse the URL: ".concat(urlString, "\nError message : ").concat(error_2));
+                    (0, util_1.handleOutput)('', "Failed to parse the URL: ".concat(urlString, "\nError message : ").concat(error_2));
                     return [3 /*break*/, 9];
                 case 9: return [2 /*return*/, null];
             }
@@ -181,19 +183,23 @@ function cloneRepo(githubUrl, targetDir) {
             switch (_a.label) {
                 case 0:
                     git = (0, simple_git_1.default)();
-                    _a.label = 1;
+                    return [4 /*yield*/, (0, util_1.handleOutput)("Cloning GitHub repo: ".concat(githubUrl), '')];
                 case 1:
-                    _a.trys.push([1, 3, , 4]);
-                    return [4 /*yield*/, git.clone(githubUrl, targetDir)];
-                case 2:
                     _a.sent();
-                    handleOutput("Cloned ".concat(githubUrl, " successfully.\n"), '');
-                    return [3 /*break*/, 4];
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 5, , 6]);
+                    return [4 /*yield*/, git.clone(githubUrl, targetDir)];
                 case 3:
+                    _a.sent();
+                    return [4 /*yield*/, (0, util_1.handleOutput)("Cloned ".concat(githubUrl, " successfully.\n"), '')];
+                case 4:
+                    _a.sent();
+                    return [3 /*break*/, 6];
+                case 5:
                     error_3 = _a.sent();
-                    handleOutput('', "Failed to clone ".concat(githubUrl, "\nError message : ").concat(error_3));
-                    return [3 /*break*/, 4];
-                case 4: return [2 /*return*/];
+                    throw new Error("Failed to clone ".concat(githubUrl, "\nError message : ").concat(error_3));
+                case 6: return [2 /*return*/];
             }
         });
     });
@@ -206,11 +212,12 @@ function cloneRepo(githubUrl, targetDir) {
 */
 function processURLs(filePath) {
     return __awaiter(this, void 0, void 0, function () {
-        var urls, i, _i, urls_1, url, githubUrl, pathSegments, owner, packageName, error_4;
+        var urls, i, _i, urls_1, url, githubUrl, pathSegments, owner, packageName, error_4, error_5;
+        var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    _a.trys.push([0, 8, , 9]);
+                    _a.trys.push([0, 15, , 18]);
                     return [4 /*yield*/, readURLFile(filePath)];
                 case 1:
                     urls = _a.sent();
@@ -218,70 +225,89 @@ function processURLs(filePath) {
                     _i = 0, urls_1 = urls;
                     _a.label = 2;
                 case 2:
-                    if (!(_i < urls_1.length)) return [3 /*break*/, 7];
+                    if (!(_i < urls_1.length)) return [3 /*break*/, 14];
                     url = urls_1[_i];
-                    handleOutput("Processing URLs (".concat(i++, "/").concat(urls.length, ") --> ").concat(url), '');
-                    return [4 /*yield*/, classifyAndConvertURL(url)];
+                    return [4 /*yield*/, (0, util_1.handleOutput)("Processing URLs (".concat((i++).toString(), "/").concat((urls.length).toString(), ") --> ").concat(url), '')];
                 case 3:
+                    _a.sent();
+                    return [4 /*yield*/, classifyAndConvertURL(url)];
+                case 4:
                     githubUrl = _a.sent();
-                    if (!githubUrl) return [3 /*break*/, 5];
+                    if (!githubUrl) return [3 /*break*/, 12];
                     pathSegments = githubUrl.pathname.split('/').filter(Boolean);
                     if (pathSegments.length != 2)
-                        throw new Error('Not a repo url');
+                        throw new Error("Not a repo url : ".concat(pathSegments.toString()));
                     owner = pathSegments[0];
                     packageName = pathSegments[1].replace('.git', '');
-                    handleOutput("Cloning GitHub repo: ".concat(githubUrl), '');
+                    _a.label = 5;
+                case 5:
+                    _a.trys.push([5, 8, , 10]);
                     return [4 /*yield*/, cloneRepo(githubUrl.toString(), "./cloned_repos/".concat(owner, " ").concat(packageName))];
-                case 4:
-                    _a.sent();
-                    return [3 /*break*/, 6];
-                case 5: throw new Error('GitHub URL is null.');
                 case 6:
-                    _i++;
-                    return [3 /*break*/, 2];
-                case 7: return [3 /*break*/, 9];
+                    _a.sent();
+                    return [4 /*yield*/, (0, metrics_1.default)(githubUrl.toString(), "./cloned_repos/".concat(owner, " ").concat(packageName))
+                            .then(function (result) { return __awaiter(_this, void 0, void 0, function () {
+                            var resultObj, formatResult, key;
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0:
+                                        resultObj = result;
+                                        formatResult = 'Metrics Results :\n';
+                                        for (key in resultObj) {
+                                            if (typeof resultObj[key] === 'number' && resultObj[key] % 1 !== 0) {
+                                                /* Truncate floating number after 3 decimal points  */
+                                                formatResult += " + ".concat(key, " : ").concat(resultObj[key].toFixed(3), "\n");
+                                            }
+                                            else {
+                                                formatResult += " + ".concat(key, " : ").concat(resultObj[key], "\n");
+                                            }
+                                        }
+                                        return [4 /*yield*/, (0, util_1.handleOutput)(formatResult, '')];
+                                    case 1:
+                                        _a.sent();
+                                        return [2 /*return*/];
+                                }
+                            });
+                        }); })
+                            .catch(function (error) { return __awaiter(_this, void 0, void 0, function () {
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0: return [4 /*yield*/, (0, util_1.handleOutput)('', "Error computing metrics\nError message : ".concat(error))];
+                                    case 1:
+                                        _a.sent();
+                                        return [2 /*return*/];
+                                }
+                            });
+                        }); })];
+                case 7:
+                    _a.sent();
+                    return [3 /*break*/, 10];
                 case 8:
                     error_4 = _a.sent();
-                    handleOutput('', "Error processing the URL file\nError message : ".concat(error_4));
-                    return [3 /*break*/, 9];
-                case 9: return [2 /*return*/];
+                    return [4 /*yield*/, (0, util_1.handleOutput)('', "Error handling url ".concat(githubUrl, "\nError message : ").concat(error_4))];
+                case 9:
+                    _a.sent();
+                    return [3 /*break*/, 10];
+                case 10: return [4 /*yield*/, (0, util_1.handleOutput)('-'.repeat(80), '')];
+                case 11:
+                    _a.sent();
+                    return [3 /*break*/, 13];
+                case 12: throw new Error('GitHub URL is null.');
+                case 13:
+                    _i++;
+                    return [3 /*break*/, 2];
+                case 14: return [3 /*break*/, 18];
+                case 15:
+                    error_5 = _a.sent();
+                    return [4 /*yield*/, (0, util_1.handleOutput)('', "Error processing the URL file\nError message : ".concat(error_5))];
+                case 16:
+                    _a.sent();
+                    return [4 /*yield*/, (0, util_1.handleOutput)('-'.repeat(50), '')];
+                case 17:
+                    _a.sent();
+                    return [3 /*break*/, 18];
+                case 18: return [2 /*return*/];
             }
-        });
-    });
-}
-/**
- * @function handleOutput
- * @description Handles the output of the result, error message, or log file. At least one of the message/errorMessage must be specified.
- * @param {string} message - Optional message to log.
- * @param {string} errorMessage - Optional error message to log.
- * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
- */
-function handleOutput() {
-    return __awaiter(this, arguments, void 0, function (message, errorMessage, endpoint) {
-        if (message === void 0) { message = ''; }
-        if (errorMessage === void 0) { errorMessage = ''; }
-        if (endpoint === void 0) { endpoint = 0; }
-        return __generator(this, function (_a) {
-            switch (endpoint) {
-                case 0: {
-                    if (message != '')
-                        console.log(message);
-                    if (errorMessage != '')
-                        console.error(errorMessage);
-                    break;
-                }
-                case 1: {
-                    break;
-                }
-                default: {
-                    if (message != '')
-                        console.log(message);
-                    if (errorMessage != '')
-                        console.error(new Error(errorMessage));
-                    break;
-                }
-            }
-            return [2 /*return*/];
         });
     });
 }
@@ -289,7 +315,7 @@ function handleOutput() {
 if (require.main === module) {
     var filePath = process.argv[2];
     if (!filePath) {
-        handleOutput('', 'No file path given. Please provide a URL file path as an argument.');
+        (0, util_1.handleOutput)('', 'No file path given. Please provide a URL file path as an argument.');
         process.exit(1);
     }
     processURLs(filePath);

@@ -1,3 +1,4 @@
 /node_modules
+/cloned_repos
 package-lock.json
-*.js
+.env
