@@ -38,6 +38,7 @@ const fs = __importStar(require("fs"));
 const readline = __importStar(require("readline"));
 const simple_git_1 = __importDefault(require("simple-git"));
 const axios_1 = __importDefault(require("axios"));
+const url_1 = require("url");
 /**
  * @function readURLFile
  * @description Reads a file line by line and extracts the URLs.
@@ -74,53 +75,63 @@ async function readURLFile(filePath) {
 /**
  * @function classifyAndConvertURL
  * @description Classifies an URL as either GitHub or npm, and if npm, converts it to a GitHub URL if possible.
- * @param {string} url - The URL to classify.
- * @returns {Promise<string | null>} - A promise that resolves to a GitHub URL if found, or null if not.
+ * @param {string} urlString - The URL to classify.
+ * @returns {Promise<URL | null>} - A promise that resolves to a GitHub URL if found, or null if not.
  */
-async function classifyAndConvertURL(url) {
+async function classifyAndConvertURL(urlString) {
     var _a;
-    if (url.includes('github.com')) {
-        return url;
-    }
-    else if (url.includes('npmjs.com')) {
-        /* Extract package name from npm URL */
-        const packageName = url.split('/').pop();
-        try {
-            /* Try to fetch GitHub URL from npm package info */
-            const response = await axios_1.default.get(`https://registry.npmjs.org/${packageName}`);
-            const repositoryUrl = (_a = response.data.repository) === null || _a === void 0 ? void 0 : _a.url;
-            if (repositoryUrl && repositoryUrl.includes('github.com')) {
-                /* Convert git+https://github.com/ to https://github.com/ */
-                const githubUrl = repositoryUrl.replace(/^git\+/, '');
-                handleOutput(`npm converted to GitHub Url : ${githubUrl}`, '');
-                return githubUrl;
+    try {
+        const parsedUrl = new url_1.URL(urlString);
+        if (parsedUrl.hostname === 'github.com') {
+            return parsedUrl;
+        }
+        else if (parsedUrl.hostname === 'www.npmjs.com') {
+            const packageName = parsedUrl.pathname.split('/').pop();
+            if (!packageName) {
+                handleOutput('', `Invalid npm URL: ${urlString}`);
+                return null;
             }
-            else {
-                handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
+            try {
+                const response = await axios_1.default.get(`https://registry.npmjs.org/${packageName}`);
+                const repoUrl = (_a = response.data.repository) === null || _a === void 0 ? void 0 : _a.url;
+                if (repoUrl && repoUrl.includes('github.com')) {
+                    const githubUrl = new url_1.URL(repoUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/'));
+                    githubUrl.pathname += '.git';
+                    handleOutput(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
+                    return githubUrl;
+                }
+                else {
+                    handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
+                }
+            }
+            catch (error) {
+                handleOutput('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
             }
         }
-        catch (error) {
-            handleOutput('', `Failed to retrieve npm package data: ${packageName}\n, Error message: ${error}`);
+        else {
+            handleOutput('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
         }
     }
-    handleOutput('', `Unknown URL type: ${url}`);
+    catch (error) {
+        handleOutput('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
+    }
     return null;
 }
 /**
  * @function cloneRepo
  * @description Clones a GitHub repository.
- * @param {string} repoUrl - The URL of the GitHub repository.
+ * @param {string} githubUrl - The string url of the GitHub repository. It cannot clone from URL object.
  * @param {string} targetDir - The directory where the repo should be cloned.
  * @returns {Promise<void>}
  */
-async function cloneRepo(repoUrl, targetDir) {
+async function cloneRepo(githubUrl, targetDir) {
     const git = (0, simple_git_1.default)();
     try {
-        await git.clone(repoUrl, targetDir);
-        handleOutput(`Cloned ${repoUrl} successfully.\n`, '');
+        await git.clone(githubUrl, targetDir);
+        handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
     }
     catch (error) {
-        handleOutput('', `Failed to clone ${repoUrl}. ${error}`);
+        handleOutput('', `Failed to clone ${githubUrl}\nError message : ${error}`);
     }
 }
 /**
@@ -132,22 +143,26 @@ async function cloneRepo(repoUrl, targetDir) {
 async function processURLs(filePath) {
     try {
         const urls = await readURLFile(filePath);
+        let i = 1;
         for (const url of urls) {
+            handleOutput(`Processing URLs (${i++}/${urls.length}) --> ${url}`, '');
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl) {
-                var splitArray = githubUrl.split('/');
-                const packageName = splitArray.pop();
-                const ownerName = splitArray.pop();
+                const pathSegments = githubUrl.pathname.split('/').filter(Boolean);
+                if (pathSegments.length != 2)
+                    throw new Error('Not a repo url');
+                const owner = pathSegments[0];
+                const packageName = pathSegments[1].replace('.git', '');
                 handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
-                await cloneRepo(githubUrl, `./cloned_repos/${ownerName}/${packageName}`);
+                await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
             }
             else {
-                new Error('URL is null.');
+                throw new Error('GitHub URL is null.');
             }
         }
     }
     catch (error) {
-        handleOutput('', `Error processing the URL file, error message : ${error}`);
+        handleOutput('', `Error processing the URL file\nError message : ${error}`);
     }
 }
 /**
@@ -179,9 +194,12 @@ async function handleOutput(message = '', errorMessage = '', endpoint = 0) {
     }
 }
 /* Entry point */
-const filePath = process.argv[2];
-if (!filePath) {
-    handleOutput('', 'Error: Please provide the URL file path as an argument.');
-    process.exit(1);
+if (require.main === module) {
+    const filePath = process.argv[2];
+    if (!filePath) {
+        handleOutput('', 'No file path given. Please provide a URL file path as an argument.');
+        process.exit(1);
+    }
+    processURLs(filePath);
 }
-processURLs(filePath);
+exports.default = processURLs;

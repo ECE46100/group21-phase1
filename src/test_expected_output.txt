@@ -1,27 +1,37 @@
-$ ./run src/test_input.txt
+./run /src/test_input.txt
 start processing urls...
+Processing URLs (1/8) --> https://github.com/cloudinary/cloudinary_npm
 Cloning GitHub repo: https://github.com/cloudinary/cloudinary_npm
 Cloned https://github.com/cloudinary/cloudinary_npm successfully.
 
-npm converted to GitHub Url : https://github.com/expressjs/express.git
+Processing URLs (2/8) --> https://www.npmjs.com/package/express
+npm converted to GitHub URL: https://github.com/expressjs/express.git
 Cloning GitHub repo: https://github.com/expressjs/express.git
 Cloned https://github.com/expressjs/express.git successfully.
 
+Processing URLs (3/8) --> https://github.com/nullivex/nodist
 Cloning GitHub repo: https://github.com/nullivex/nodist
 Cloned https://github.com/nullivex/nodist successfully.
 
+Processing URLs (4/8) --> httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git
 Cloning GitHub repo: httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git
-Failed to clone httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git. Error: Cloning into './cloned_repos/midas1214 hw1_github_tutorial.git'...
+Failed to clone httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git
+Error message : Error: Cloning into './cloned_repos/midas1214 hw1_github_tutorial'...
 git: 'remote-httpsasdfasdf' is not a git command. See 'git --help'.
 
+Processing URLs (5/8) --> https://github.com/lodash/lodash
 Cloning GitHub repo: https://github.com/lodash/lodash
 Cloned https://github.com/lodash/lodash successfully.
 
-npm converted to GitHub Url : ssh://git@github.com/browserify/browserify.git
-Cloning GitHub repo: ssh://git@github.com/browserify/browserify.git
-Cloned ssh://git@github.com/browserify/browserify.git successfully.
+Processing URLs (6/8) --> https://www.npmjs.com/package/browserify
+npm converted to GitHub URL: https://github.com/browserify/browserify.git
+Cloning GitHub repo: https://github.com/browserify/browserify.git
+Cloned https://github.com/browserify/browserify.git successfully.
 
+Processing URLs (7/8) --> https://github.com/midas1214/hw1_github_tutorial.git
 Cloning GitHub repo: https://github.com/midas1214/hw1_github_tutorial.git
 Cloned https://github.com/midas1214/hw1_github_tutorial.git successfully.
 
-
+Processing URLs (8/8) --> https://github.com/ECE46100/group21-phase1/issues
+Error processing the URL file
+Error message : Error: Not a repo url

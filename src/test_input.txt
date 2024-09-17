@@ -5,3 +5,4 @@ httpsasdfasdf://github.com/midas1214/hw1_github_tutorial.git
 https://github.com/lodash/lodash
 https://www.npmjs.com/package/browserify
 https://github.com/midas1214/hw1_github_tutorial.git
+https://github.com/ECE46100/group21-phase1/issues

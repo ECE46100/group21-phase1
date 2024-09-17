@@ -5,8 +5,6 @@
  * asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
  */
 
-// import { spawn } from 'child_process';
-// import * as fs from 'fs';
 import * as threading from 'worker_threads';
 import * as glob from 'glob';
 import * as path from 'path';
@@ -165,12 +163,12 @@ async function computeCorrectness(packagePath: string, packageUrl: string): Prom
                 if (packageJson.devDependencies.mocha) {
                     return testRunnerMocha(file);
                 } else if (packageJson.devDependencies.jest) {
-                    return testRunnerJest(file);
+                    // return testRunnerJest(file);
                 }
             }
 
             // Default value if no test runner is found
-            return [0, 0];
+            return [0, 0, 0, 0];
         }));
 
         // Aggregate results
@@ -186,100 +184,6 @@ async function computeCorrectness(packagePath: string, packageUrl: string): Prom
     } catch (error) {
         throw new Error(`Failed to compute correctness: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-}
-        
-async function testRunnerMocha(file: string): Promise<number[]> {
-    return new Promise((resolve, reject) => {
-        console.log('Running Mocha tests');
-        const cwd = path.dirname(file);
-        console.log(cwd);
-        // Install dependencies and nyc
-        const installProcess = spawn('npm', ['i'], { cwd });
-        installProcess.on('exit', (code) => {
-            if (code === 0) {
-                console.log('Dependencies installed');
-                const installCov = spawn('npm', ['i', 'nyc'], { cwd });
-                installCov.on('exit', (code) => {
-                    if (code === 0) {
-                        console.log('nyc installed');
-                        const testProcess = spawn('npx', 
-                            ['nyc', '--reporter=json-summary', 'mocha', '--reporter=json', '--reporter-options', 'output=test_out.json'], 
-                            { cwd,
-                                stdio: ['ignore', 'ignore', 'ignore'],
-                        });
-                        testProcess.on('exit', () => {
-                            console.log('tests completed');
-                            fs.readFile(path.join(cwd, 'test_out.json'), { encoding: 'utf8' }, (err, data) => {
-                                let passes = 0;
-                                let ran = 0;
-
-                                if (err) {
-                                    const jsonData = JSON.parse(data);
-                                    passes = jsonData.stats.passes;
-                                    ran = jsonData.stats.tests;
-                                } else {
-                                    passes = 0;
-                                    ran = 0;
-                                }
-                                fs.readFile(path.join(cwd, 'coverage', 'coverage-summary.json'), { encoding: 'utf8' }, (err, data) => {
-                                    let lines_hit = 0;
-                                    let lines = 0;
-                                    if (err) {
-                                        const jsonData = JSON.parse(data);
-                                        lines_hit = jsonData.total.lines.hit;
-                                        lines = jsonData.total.lines.found;
-                                    } else {
-                                        lines_hit = 0;
-                                        lines = 0;
-                                    }
-                                    resolve([passes, ran, lines_hit, lines]);
-                                });
-                            });
-                        });
-                    } else {
-                        resolve([0, 0, 0, 0]);
-                    }
-                });
-            } else {
-                resolve([0, 0, 0, 0]);
-            }
-        });
-    });
-}
-
-async function testRunnerJest(file: string): Promise<number[]> {
-    return new Promise((resolve, reject) => {
-        console.log('Running Jest tests');
-        const cwd = path.dirname(file);
-        console.log(cwd);
-        // Install dependencies
-        const installProcess = spawn('npm', ['i'], { cwd });
-        installProcess.on('exit', (code) => {
-            if (code === 0) {
-                console.log('Dependencies installed');
-                const testProcess = spawn('npx', ['jest', '--json', '--outputFile', 'test_out.json'], { cwd });
-                testProcess.on('exit', () => {
-                    console.log('tests completed');
-                    fs.readFile(path.join(cwd, 'test_out.json'), { encoding: 'utf8' }, (err, data) => {
-                        let passes = 0;
-                        let ran = 0;
-
-                        if (err) {
-                            const jsonData = JSON.parse(data);
-                            passes = jsonData.numPassedTests;
-                            ran = jsonData.numTotalTests;
-                        } else {
-                            passes = 0;
-                            ran = 0;
-                        }
-                        resolve([passes, ran, 0, 0]);
-                    });
-                });
-            } else {
-                resolve([0, 0, 0, 0]);
-            }
-        });
-    });
 }
 
 if (!threading.isMainThread) {

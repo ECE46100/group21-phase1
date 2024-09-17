@@ -1,7 +1,7 @@
 import computeMetrics from './metrics';
 
 console.log('Running test_metrics.ts');
-computeMetrics('https://www.example.com', 'cloned_repos/expressjs express.git').then((result) => {
+computeMetrics('https://www.example.com', 'cloned_repos/cloudinary cloudinary_npm').then((result) => {
     console.log('Metrics computed:');
     console.log(result);
 }).catch((error: unknown) => {
