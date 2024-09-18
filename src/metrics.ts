@@ -8,7 +8,8 @@
 import * as threading from 'worker_threads';
 import * as path from 'path';
 import { cpus } from 'os';
-import { spawn } from 'child_process';import axios from 'axios';
+import { spawn } from 'child_process';
+import axios from 'axios';
 import { handleOutput, getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
 import { ESLint } from 'eslint';
