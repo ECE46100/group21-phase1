@@ -3,6 +3,8 @@ import * as readline from 'readline';
 import simpleGit from 'simple-git';
 import axios from 'axios';
 import { URL } from 'url';
+import { handleOutput } from './util';
+import computeMetrics from './metrics';
 
 /**
  * @function readURLFile
@@ -79,11 +81,12 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
  */
 async function cloneRepo(githubUrl: string, targetDir: string): Promise<void>  {
     const git = simpleGit();
+    await handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
     try {
         await git.clone(githubUrl, targetDir);
-        handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
+        await handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
     } catch (error) {
-        handleOutput('', `Failed to clone ${githubUrl}\nError message : ${error}`);
+        throw new Error(`Failed to clone ${githubUrl}\nError message : ${error}`);
     }
 }
 
@@ -98,16 +101,40 @@ export async function processURLs(filePath: string): Promise<void> {
         const urls = await readURLFile(filePath);
         let i = 1;
         for (const url of urls) {
-            handleOutput(`Processing URLs (${i++}/${urls.length}) --> ${url}`, '');
+            await handleOutput(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl)
             {
                 const pathSegments = githubUrl.pathname.split('/').filter(Boolean);
-                if (pathSegments.length != 2) throw new Error('Not a repo url');
+                if (pathSegments.length != 2) throw new Error(`Not a repo url : ${pathSegments.toString()}`);
                 const owner = pathSegments[0];
                 const packageName = pathSegments[1].replace('.git', '');
-                handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
-                await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
+                try{
+                    await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
+                    await computeMetrics(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`)
+                            .then(async result=>{
+                                /* First tell TS that resultOgj (made from result) can be indexed with a string */
+                                const resultObj = result as Record<string, unknown>; 
+                                let formatResult = 'Metrics Results :\n';
+                                for (const key in resultObj){
+                                    if (typeof resultObj[key] === 'number' && resultObj[key] % 1 !== 0){
+                                        /* Truncate floating number after 3 decimal points  */
+                                        formatResult += ` + ${key} : ${resultObj[key].toFixed(3)}\n`;
+                                    }
+                                    else{
+                                        formatResult += ` + ${key} : ${resultObj[key]}\n`;
+                                    }
+                                }
+                                await handleOutput(formatResult, '');
+                            })
+                            .catch(async (error: unknown)=>{
+                                await handleOutput('', `Error computing metrics\nError message : ${error}`);
+                            })
+                }
+                catch(error){
+                    await handleOutput('', `Error handling url ${githubUrl}\nError message : ${error}`);
+                }
+                await handleOutput('-'.repeat(80), '');
             }
             else
             {
@@ -115,33 +142,9 @@ export async function processURLs(filePath: string): Promise<void> {
             }
         }
     } catch (error) {
-        handleOutput('', `Error processing the URL file\nError message : ${error}`);
+        await handleOutput('', `Error processing the URL file\nError message : ${error}`);
+        await handleOutput('-'.repeat(50), '');
     }
-}
-
-/**
- * @function handleOutput
- * @description Handles the output of the result, error message, or log file. At least one of the message/errorMessage must be specified.
- * @param {string} message - Optional message to log.
- * @param {string} errorMessage - Optional error message to log.
- * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
- */
-async function handleOutput(message = '', errorMessage = '', endpoint = 0): Promise<void> {
-    switch(endpoint) { 
-        case 0: { 
-            if (message != '') console.log(message);
-            if (errorMessage != '') console.error(errorMessage);
-            break; 
-        } 
-        case 1: { 
-            break;   
-        } 
-        default: { 
-            if (message != '') console.log(message);
-            if (errorMessage != '') console.error(new Error(errorMessage));
-            break; 
-        } 
-     } 
 }
 
 /* Entry point */
@@ -154,4 +157,4 @@ if (require.main === module) {
     processURLs(filePath);
 }
 
-export default processURLs
+export default processURLs;

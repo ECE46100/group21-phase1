@@ -2,7 +2,7 @@
 
 # Function to install dependencies (sort of)
 install() {
-    echo "start installing dependencies..."
+    echo -e "start installing dependencies...\\n"
     npm install
     if [ $? -eq 0 ]; then
         echo "Dependencies installed successfully."
@@ -15,7 +15,7 @@ install() {
 
 # Function to run tests (sort of)
 run_tests() {
-    echo "start testing project"
+    echo -e "start testing project...\\n"
     # npx ts-node src/processUrls.ts src/input.txt
     # npm test    
     # if [ $? -eq 0 ]; then
@@ -29,7 +29,7 @@ run_tests() {
 
 # Function to process URLs using TypeScript
 process_urls() {
-    echo "start processing urls..."
+    echo -e "start processing urls...\\n"
     URL_FILE=$1
     if [ -f "$URL_FILE" ]; then
         npx ts-node src/processUrls.ts "$URL_FILE"

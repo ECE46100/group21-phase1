@@ -39,6 +39,8 @@ const readline = __importStar(require("readline"));
 const simple_git_1 = __importDefault(require("simple-git"));
 const axios_1 = __importDefault(require("axios"));
 const url_1 = require("url");
+const util_1 = require("./util");
+const metrics_1 = __importDefault(require("./metrics"));
 /**
  * @function readURLFile
  * @description Reads a file line by line and extracts the URLs.
@@ -88,7 +90,7 @@ async function classifyAndConvertURL(urlString) {
         else if (parsedUrl.hostname === 'www.npmjs.com') {
             const packageName = parsedUrl.pathname.split('/').pop();
             if (!packageName) {
-                handleOutput('', `Invalid npm URL: ${urlString}`);
+                (0, util_1.handleOutput)('', `Invalid npm URL: ${urlString}`);
                 return null;
             }
             try {
@@ -97,23 +99,23 @@ async function classifyAndConvertURL(urlString) {
                 if (repoUrl && repoUrl.includes('github.com')) {
                     const githubUrl = new url_1.URL(repoUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/'));
                     githubUrl.pathname += '.git';
-                    handleOutput(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
+                    (0, util_1.handleOutput)(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
                     return githubUrl;
                 }
                 else {
-                    handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
+                    (0, util_1.handleOutput)('', `No GitHub repository found for npm package: ${packageName}`);
                 }
             }
             catch (error) {
-                handleOutput('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
+                (0, util_1.handleOutput)('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
             }
         }
         else {
-            handleOutput('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
+            (0, util_1.handleOutput)('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
         }
     }
     catch (error) {
-        handleOutput('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
+        (0, util_1.handleOutput)('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
     }
     return null;
 }
@@ -126,12 +128,13 @@ async function classifyAndConvertURL(urlString) {
  */
 async function cloneRepo(githubUrl, targetDir) {
     const git = (0, simple_git_1.default)();
+    await (0, util_1.handleOutput)(`Cloning GitHub repo: ${githubUrl}`, '');
     try {
         await git.clone(githubUrl, targetDir);
-        handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
+        await (0, util_1.handleOutput)(`Cloned ${githubUrl} successfully.\n`, '');
     }
     catch (error) {
-        handleOutput('', `Failed to clone ${githubUrl}\nError message : ${error}`);
+        throw new Error(`Failed to clone ${githubUrl}\nError message : ${error}`);
     }
 }
 /**
@@ -145,16 +148,40 @@ async function processURLs(filePath) {
         const urls = await readURLFile(filePath);
         let i = 1;
         for (const url of urls) {
-            handleOutput(`Processing URLs (${i++}/${urls.length}) --> ${url}`, '');
+            await (0, util_1.handleOutput)(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl) {
                 const pathSegments = githubUrl.pathname.split('/').filter(Boolean);
                 if (pathSegments.length != 2)
-                    throw new Error('Not a repo url');
+                    throw new Error(`Not a repo url : ${pathSegments.toString()}`);
                 const owner = pathSegments[0];
                 const packageName = pathSegments[1].replace('.git', '');
-                handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
-                await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
+                try {
+                    await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
+                    await (0, metrics_1.default)(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`)
+                        .then(async (result) => {
+                        /* First tell TS that resultOgj (made from result) can be indexed with a string */
+                        const resultObj = result;
+                        let formatResult = 'Metrics Results :\n';
+                        for (const key in resultObj) {
+                            if (typeof resultObj[key] === 'number' && resultObj[key] % 1 !== 0) {
+                                /* Truncate floating number after 3 decimal points  */
+                                formatResult += ` + ${key} : ${resultObj[key].toFixed(3)}\n`;
+                            }
+                            else {
+                                formatResult += ` + ${key} : ${resultObj[key]}\n`;
+                            }
+                        }
+                        await (0, util_1.handleOutput)(formatResult, '');
+                    })
+                        .catch(async (error) => {
+                        await (0, util_1.handleOutput)('', `Error computing metrics\nError message : ${error}`);
+                    });
+                }
+                catch (error) {
+                    await (0, util_1.handleOutput)('', `Error handling url ${githubUrl}\nError message : ${error}`);
+                }
+                await (0, util_1.handleOutput)('-'.repeat(80), '');
             }
             else {
                 throw new Error('GitHub URL is null.');
@@ -162,42 +189,15 @@ async function processURLs(filePath) {
         }
     }
     catch (error) {
-        handleOutput('', `Error processing the URL file\nError message : ${error}`);
-    }
-}
-/**
- * @function handleOutput
- * @description Handles the output of the result, error message, or log file. At least one of the message/errorMessage must be specified.
- * @param {string} message - Optional message to log.
- * @param {string} errorMessage - Optional error message to log.
- * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
- */
-async function handleOutput(message = '', errorMessage = '', endpoint = 0) {
-    switch (endpoint) {
-        case 0: {
-            if (message != '')
-                console.log(message);
-            if (errorMessage != '')
-                console.error(errorMessage);
-            break;
-        }
-        case 1: {
-            break;
-        }
-        default: {
-            if (message != '')
-                console.log(message);
-            if (errorMessage != '')
-                console.error(new Error(errorMessage));
-            break;
-        }
+        await (0, util_1.handleOutput)('', `Error processing the URL file\nError message : ${error}`);
+        await (0, util_1.handleOutput)('-'.repeat(50), '');
     }
 }
 /* Entry point */
 if (require.main === module) {
     const filePath = process.argv[2];
     if (!filePath) {
-        handleOutput('', 'No file path given. Please provide a URL file path as an argument.');
+        (0, util_1.handleOutput)('', 'No file path given. Please provide a URL file path as an argument.');
         process.exit(1);
     }
     processURLs(filePath);
