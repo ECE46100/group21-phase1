@@ -2,25 +2,29 @@
  * computeMetrics is the only externally accessible function from this file. It facilitates running
  * multiple metrics in parallel. To add a metric calculation, create a function definition that follows the 
  * typing (type metricFunction) and add the function name to the metrics array. Metric functions must be 
- * asynchronous (return promises). metricSample shows how to make a synchoronous function asynchronous.
+ * asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
  */
 
-// import { spawn } from 'child_process';
-// import * as fs from 'fs';
 import * as threading from 'worker_threads';
+import * as path from 'path';
 import { cpus } from 'os';
+import { spawn } from 'child_process';
 import axios from 'axios';
 import { handleOutput, getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
+import { ESLint } from 'eslint';
+import * as fs from 'fs';
+
 dotenv.config();
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? ''
+const ESLINT_CONFIG = path.join(process.cwd(), 'src', 'eslint_package.config.mjs');
 
 /**
  * @type metricFunction
  * @description Type for metric calculating functions, should only return the result of the calculation.
  */
 type metricFunction = (packageUrl: string, packagePath: string) => Promise<number>;
-const metrics: metricFunction[] = [busFactor, maintainerActiveness];
+const metrics: metricFunction[] = [busFactor, maintainerActiveness, correctness];
 
 /**
  * @interface metricPair
@@ -48,10 +52,12 @@ type packageResult = {
  */
 async function computeMetrics(packageUrl: string, packagePath: string): Promise<packageResult> {
     return new Promise((resolve, reject) => {
+        /* Get the number of cores available - picked two metrics per core */
         const cores = cpus().length;
         const maxWorkers = Math.min(cores, 2 * metrics.length);
         const metricThreads: threading.Worker[] = [];
         const results: metricPair[] = [];
+        const netScoreStart = Date.now();
         let completed = 0;
         let started = 0;
 
@@ -80,7 +86,7 @@ async function computeMetrics(packageUrl: string, packagePath: string): Promise<
                     const finalResult: packageResult = {
                         URL: packageUrl,
                         NetScore: results.reduce((acc, curr) => acc + curr[Object.keys(curr)[0]], 0) / metrics.length,
-                        NetScore_Latency: results.reduce((acc, curr) => acc + curr[`${Object.keys(curr)[0]}_Latency`], 0) / metrics.length,
+                        NetScore_Latency: (Date.now() - netScoreStart) / 1000,
                         ...results.reduce((acc, curr) => ({ ...acc, ...curr }), {})
                     };
                     const terminationPromises = metricThreads.map(worker => worker.terminate());
@@ -106,7 +112,6 @@ async function computeMetrics(packageUrl: string, packagePath: string): Promise<
         }
     });
 }
-
 
 /**
  * @function metricsRunner
@@ -184,7 +189,7 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
     }
 
     return score;
-};
+}
 
 /**
  * @function busFactor
@@ -237,6 +242,113 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
     }
 }
 
+/**
+ * @function correctness
+ * @description A metric that calculates the "correctness" of the package through a combination of dependency analysis and linting
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - The path to the cloned repository.
+ * @returns {number} - The score for correctness, calculated as a weighted sum of the dependency and linting scores.
+ */
+async function correctness(packageUrl: string, packagePath: string): Promise<number> {
+    const dependencyScore = await dependencyAnalysis(packagePath);
+    const lintingScore = await linting(packagePath);
+    return (lintingScore + dependencyScore) * 0.5;
+}
+
+/**
+ * @function dependencyAnalysis
+ * @description Perform dependency analysis on the package, by running npm audit in each directory with a package.json file.
+ * @param {string} packagePath - The path to the cloned repository.
+ * @returns {number[]} - The number of dependencies with each vulnerability level (low, moderate, high, critical).
+ */
+async function dependencyAnalysis(packagePath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+        /* This does "shell out" the npm audit command, however this was done because:
+        *  1. The command is not based on user inputs.
+        *  2. I could not find a suitable library for running npm commands.
+        */
+        fs.readFile(path.join(packagePath, 'package.json'), 'utf8', (err, data) => {
+            if (err) {
+                reject(new Error(`Error reading package.json: ${err}`));
+            }
+            const packageJson = JSON.parse(data);
+            /* Replace link with file (if they exist) - yarn supports 'link' but npm does not */
+            if (packageJson.dependencies) {
+                for (const [dep, version] of Object.entries(packageJson.dependencies)) {
+                    if (typeof version === 'string' && version.trim().startsWith('link')) {
+                        packageJson.dependencies[dep] = 'file' + version.trim().slice(4);
+                    }
+                }
+            }
+            if (packageJson.devDependencies) {
+                for (const [dep, version] of Object.entries(packageJson.devDependencies)) {
+                    if (typeof version === 'string' && version.trim().startsWith('link')) {
+                        packageJson.devDependencies[dep] = 'file' + version.trim().slice(4);
+                    }
+                }
+            }
+            fs.writeFile(path.join(packagePath, 'package.json'), JSON.stringify(packageJson), (err) => {
+                if (err) {
+                    reject(new Error(`Error writing package.json: ${err}`));
+                }
+                /* Run npm audit in the package directory - force just in case their dependencies have conflicts */
+                const audit = spawn('npm', ['audit', '--no-package-lock', '--force', '--json'], { cwd: packagePath });
+                let jsonFromAudit = "";
+
+                audit.stdout.on('data', (data) => {
+                    jsonFromAudit += data;
+                });
+
+                audit.on('close', () => {
+                    try {
+                        const auditData = JSON.parse(jsonFromAudit);
+                        const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
+                        const levels = ['low', 'moderate', 'high', 'critical'];
+                        const vulnerabilities: number[] = [];
+                        for (let i = 0; i < levels.length; i++) {
+                            vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                        }
+                        const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc * (curr * (0.5 - idx / 10)), 1);
+                        resolve(auditScore);
+                    } catch (error) {
+                        reject(new Error(`Error parsing npm audit JSON: ${error}`));
+                    }
+                });
+            });
+        });
+    });
+}
+
+/**
+ * @function linting
+ * @description Perform linting on the package, using ESLint.
+ * @param {string} packagePath - The path to the cloned repository.
+ * @returns {number} - The score for linting, based on the number of linter errors.
+ */
+async function linting(packagePath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+        /* Create a new ESLint instance - see eslint_package.config.mjs for linter configuration */
+        const eslint = new ESLint({
+            overrideConfigFile: ESLINT_CONFIG,
+            allowInlineConfig: true,
+            globInputPaths: true,
+            ignore: true,
+        });
+        /* Look for all js and ts files in the package */
+        const pattern = path.join(packagePath, '**/*.{js,ts}');
+
+        /* Run the linter and sum the error counts */
+        eslint.lintFiles(pattern).then((results) => {
+            const errorCount = results.reduce((acc, curr) => acc + curr.errorCount, 0);
+            const filesLinted = results.length;
+            const lintScore = 1 - (errorCount / filesLinted / 10);
+            resolve(lintScore);
+        }).catch((error: unknown) => {
+            reject(new Error(`Error running ESLint: ${error}`));
+        });
+    });
+}
+
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData as { metricIndex: number, url: string, path: string };
     const metric = metrics[metricIndex];
@@ -246,6 +358,7 @@ if (!threading.isMainThread) {
             childPort.hereIsYourPort.close();
         }).catch((error: unknown) => {
             console.error(error);
+            childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: [-1, -1] });
             childPort.hereIsYourPort.close();
         });
     });
