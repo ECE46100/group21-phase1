@@ -32,9 +32,9 @@ process_urls() {
     echo -e "start processing urls...\\n"
     URL_FILE=$1
     if [ -f "$URL_FILE" ]; then
-        npx ts-node src/processUrls.ts "$URL_FILE"
         # To make it faster : pre-compile the processUrl.ts and just run the js file as below
-        # node src/processUrls.js "$URL_FILE"
+        npx tsc
+        node src/processUrls.js "$URL_FILE"
         if [ $? -eq 0 ]; then
             exit 0
         else
