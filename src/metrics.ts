@@ -14,10 +14,23 @@ import { handleOutput, getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
 import { ESLint } from 'eslint';
 import * as fs from 'fs';
+import * as winston from 'winston';
 
 dotenv.config();
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? ''
 const ESLINT_CONFIG = path.join(process.cwd(), 'src', 'eslint_package.config.mjs');
+
+const log_levels = ['warn', 'info', 'debug'];
+const LOG_LEVEL: number = parseInt(process.env.LOG_LEVEL ?? '0', 10);
+const LOG_FILE = process.env.LOG_FILE;
+
+winston.configure({
+    level: log_levels[LOG_LEVEL],
+    transports: [
+        new winston.transports.File({ filename: LOG_FILE })
+    ]
+});
+winston.remove(winston.transports.Console);
 
 /**
  * @type metricFunction
@@ -250,6 +263,7 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
  * @returns {number} - The score for correctness, calculated as a weighted sum of the dependency and linting scores.
  */
 async function correctness(packageUrl: string, packagePath: string): Promise<number> {
+    winston.log('info', "Calculating correctness metric");
     const dependencyScore = await dependencyAnalysis(packagePath);
     const lintingScore = await linting(packagePath);
     return (lintingScore + dependencyScore) * 0.5;
@@ -292,27 +306,30 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                     reject(new Error(`Error writing package.json: ${err}`));
                 }
                 /* Run npm audit in the package directory - force just in case their dependencies have conflicts */
-                const audit = spawn('npm', ['audit', '--no-package-lock', '--force', '--json'], { cwd: packagePath });
-                let jsonFromAudit = "";
+                const install = spawn('npm', ['install', '--package-lock-only', '--legacy-peer-deps'], { cwd: packagePath });
+                install.on('close', (code) => {
+                    const audit = spawn('npm', ['audit', '--json'], { cwd: packagePath });
+                    let jsonFromAudit = "";
 
-                audit.stdout.on('data', (data) => {
-                    jsonFromAudit += data;
-                });
+                    audit.stdout.on('data', (data) => {
+                        jsonFromAudit += data;
+                    });
 
-                audit.on('close', () => {
-                    try {
-                        const auditData = JSON.parse(jsonFromAudit);
-                        const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
-                        const levels = ['low', 'moderate', 'high', 'critical'];
-                        const vulnerabilities: number[] = [];
-                        for (let i = 0; i < levels.length; i++) {
-                            vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                    audit.on('close', () => {
+                        try {
+                            const auditData = JSON.parse(jsonFromAudit);
+                            const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
+                            const levels = ['low', 'moderate', 'high', 'critical'];
+                            const vulnerabilities: number[] = [];
+                            for (let i = 0; i < levels.length; i++) {
+                                vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                            }
+                            const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc * (curr * (0.5 - idx / 10)), 1);
+                            resolve(auditScore);
+                        } catch (error) {
+                            reject(new Error(`Error parsing npm audit JSON: ${error}`));
                         }
-                        const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc * (curr * (0.5 - idx / 10)), 1);
-                        resolve(auditScore);
-                    } catch (error) {
-                        reject(new Error(`Error parsing npm audit JSON: ${error}`));
-                    }
+                    });
                 });
             });
         });

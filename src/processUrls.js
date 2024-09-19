@@ -41,8 +41,6 @@ const axios_1 = __importDefault(require("axios"));
 const url_1 = require("url");
 const util_1 = require("./util");
 const metrics_1 = __importDefault(require("./metrics"));
-var util_1 = require("./util");
-var metrics_1 = require("./metrics");
 /**
  * @function readURLFile
  * @description Reads a file line by line and extracts the URLs.

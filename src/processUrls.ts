@@ -5,6 +5,21 @@ import axios from 'axios';
 import { URL } from 'url';
 import { handleOutput } from './util';
 import computeMetrics from './metrics';
+import * as winston from 'winston';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+const log_levels = ['warn', 'info', 'debug'];
+const LOG_LEVEL: number = parseInt(process.env.LOG_LEVEL ?? '0', 10);
+const LOG_FILE = process.env.LOG_FILE;
+
+winston.configure({
+    level: log_levels[LOG_LEVEL],
+    transports: [
+        new winston.transports.File({ filename: LOG_FILE, options: { flags: 'w' } }),
+    ]
+});
+winston.remove(winston.transports.Console);
 
 /**
  * @function readURLFile

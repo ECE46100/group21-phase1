@@ -2,3 +2,4 @@
 /cloned_repos
 package-lock.json
 .env
+/src/*.js
