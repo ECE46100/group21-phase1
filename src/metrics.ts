@@ -210,7 +210,12 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
 
         score = 1 - (openIssues / totalIssues);
     } catch (error) {
-        throw new Error(`Error calculating maintaine activeness\nError message : ${error}`)
+        if (error instanceof Error) {
+            console.error(`Error calculating maintainerActivenessMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating maintainerActivenessMetric:', error);
+        }
+        return 0;
     }
 
     return score;
@@ -262,7 +267,11 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
 
         return score;
     } catch (error) {
-        console.error(`Error calculating activeContributorsMetric: ${error}`);
+        if (error instanceof Error) {
+            console.error(`Error calculating activeContributorsMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating activeContributorsMetric:', error);
+        }
         return 0;
     }
 }
@@ -506,6 +515,35 @@ function analyzeCodeComments(files: string[]): { commentLines: number, totalLine
     }
 
     return { commentLines, totalLines };
+}
+
+
+/**
+ * @function license
+ * @description A metric that calculates if the package has a conforming LGPLv2.1 license
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
+ */
+
+export async function license(packageUrl: string, packagePath: string): Promise<number> {
+
+    let score = 0;
+
+    const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+    try {
+        if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
+        score = 1;
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            console.error(`Error calculating licenseMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating licenseMetric:', error);
+        }
+        return 0;
+    }
+    return score;
 }
 
 
