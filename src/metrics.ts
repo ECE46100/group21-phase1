@@ -392,6 +392,123 @@ async function linting(packagePath: string): Promise<number> {
     });
 }
 
+/**
+ * @function rampUpTime
+ * @description Calculates the ramp-up time based on the presence of documentation and code comments.
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - The path to the cloned repository.
+ * @returns {Promise<number>} - The score for ramp-up time between 0 and 1.
+ */
+async function rampUpTime(packageUrl: string, packagePath: string): Promise<number> {
+    const fs = require('fs');
+    const path = require('path');
+    
+    /* Analyze README, can either make readmeScore 0 if there's error or simply throw an error and skip the rampUpTime function */
+    const readmePath = findReadmeFile(packagePath);
+    let readmeScore = 0;
+    if (readmePath) {
+        try {
+            const readmeContent = fs.readFileSync(readmePath, 'utf-8');
+            readmeScore = readmeContent.length > 1500 ? 1 : (readmeContent.length > 1000 ? 0.75 : (readmeContent.length > 500 ? 0.5 : 0.25));
+        } catch (error) {
+            //console.error("Error reading README file", error);
+            readmeScore = 0;
+        }
+    } else {
+        // console.warn('No README found in the repository');
+        readmeScore = 0;
+    }
+
+
+    /* Analyze code comments */
+    const codeFiles = getAllCodeFiles(packagePath); // Function to get all relevant code files
+    const { commentLines, totalLines } = analyzeCodeComments(codeFiles);
+
+    /* Calculate comment density score (assuming >10% comment lines is a good ratio) */
+    const commentDensity = commentLines / totalLines;
+    const commentScore = commentDensity > 0.2 ? 1 : (commentDensity > 0.15 ? 0.75 : (commentDensity > 0.1 ? 0.5 : 0.25));
+
+    /* Combine the scores (adjust weights as necessary) */
+    const rampUpScore = 0.5 * readmeScore + 0.5 * commentScore;
+    return Promise.resolve(rampUpScore);
+}
+
+/**
+ * @function findReadmeFile
+ * @description Recursively searches for a README file in the repository.
+ * @param {string} dir - The directory to start the search from.
+ * @returns {string | null} - The path to the README file, or null if not found.
+ */
+function findReadmeFile(dir: string): string | null {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            const found = findReadmeFile(fullPath);
+            if (found) return found;
+        } else if (file.toLowerCase().startsWith('readme')) {
+            return fullPath;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @function getAllCodeFiles
+ * @description Recursively finds all relevant code files in a directory (e.g., .js, .ts files).
+ * @param {string} dir - The directory to search for code files.
+ * @returns {string[]} - A list of file paths.
+ */
+function getAllCodeFiles(dir: string): string[] {
+    const fs = require('fs');
+    const path = require('path');
+    let codeFiles: string[] = [];
+
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+            codeFiles = codeFiles.concat(getAllCodeFiles(fullPath)); // Recursive search
+        } else if (file.endsWith('.ts') || file.endsWith('.js')) {
+            codeFiles.push(fullPath);
+        }
+    }
+    return codeFiles;
+}
+
+/**
+ * @function analyzeCodeComments
+ * @description Analyzes the number of comment lines and total lines of code in the given files.
+ * @param {string[]} files - List of code file paths.
+ * @returns {{commentLines: number, totalLines: number}} - The number of comment lines and total lines of code.
+ */
+function analyzeCodeComments(files: string[]): { commentLines: number, totalLines: number } {
+    const fs = require('fs');
+    let commentLines = 0;
+    let totalLines = 0;
+
+    for (const file of files) {
+        const content = fs.readFileSync(file, 'utf-8');
+        const lines = content.split('\n');
+        totalLines += lines.length;
+        
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || trimmedLine.startsWith('*')) {
+                commentLines++;
+            }
+        }
+    }
+
+    return { commentLines, totalLines };
+}
+
+
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData as { metricIndex: number, url: string, path: string };
     const metric = metrics[metricIndex];
