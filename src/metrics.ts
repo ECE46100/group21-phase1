@@ -40,11 +40,12 @@ type metricFunction = (packageUrl: string, packagePath: string) => Promise<numbe
 const metrics: metricFunction[] = [
     busFactor,
     maintainerActiveness,
+    rampUpTime,
     correctness,
-    rampUpTime
+    license,
 ];
 
-const weights: Record<string, number> = { busFactor: 0.3, maintainerActiveness: 0.3, correctness: 0.4 };
+const weights: Record<string, number> = { busFactor: 0.25, license: 0.25, maintainerActiveness: 0.2, correctness: 0.1, rampUpTime: 0.2 };
 
 /**
  * @interface metricPair
@@ -433,7 +434,7 @@ async function rampUpTime(packageUrl: string, packagePath: string): Promise<numb
 
 /**
  * @function findReadmeFile
- * @description Recursively searches for a README file in the repository.
+ * @description Recursively searches for a README file in the repository, skipping symbolic links.
  * @param {string} dir - The directory to start the search from.
  * @returns {string | null} - The path to the README file, or null if not found.
  */
@@ -442,7 +443,13 @@ function findReadmeFile(dir: string): string | null {
 
     for (const file of files) {
         const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
+        const stat = fs.lstatSync(fullPath);
+
+        if (stat.isSymbolicLink()) {
+            // Skip symbolic links to avoid loops
+            //console.warn(`Skipping symbolic link: ${fullPath}`);
+            continue;
+        }
 
         if (stat.isDirectory()) {
             const found = findReadmeFile(fullPath);
@@ -457,7 +464,7 @@ function findReadmeFile(dir: string): string | null {
 
 /**
  * @function getAllCodeFiles
- * @description Recursively finds all relevant code files in a directory (e.g., .js, .ts files).
+ * @description Recursively finds all relevant code files in a directory (e.g., .js, .ts files), skipping symlinks.
  * @param {string} dir - The directory to search for code files.
  * @returns {string[]} - A list of file paths.
  */
@@ -465,15 +472,23 @@ function getAllCodeFiles(dir: string): string[] {
     let codeFiles: string[] = [];
 
     const files = fs.readdirSync(dir);
+
     for (const file of files) {
         const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
+        const stat = fs.lstatSync(fullPath);
+
+        if (stat.isSymbolicLink()) {
+            //console.warn(`Skipping symbolic link: ${fullPath}`);
+            continue;
+        }
+
         if (stat.isDirectory()) {
-            codeFiles = codeFiles.concat(getAllCodeFiles(fullPath)); // Recursive search
+            codeFiles = codeFiles.concat(getAllCodeFiles(fullPath)); // Recursive search in subdirectories
         } else if (file.endsWith('.ts') || file.endsWith('.js')) {
             codeFiles.push(fullPath);
         }
     }
+
     return codeFiles;
 }
 
@@ -551,7 +566,6 @@ if (!threading.isMainThread) {
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: metricResult });
             childPort.hereIsYourPort.close();
         }).catch((error: unknown) => {
-            console.error(error);
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: [-1, -1] });
             childPort.hereIsYourPort.close();
         });
