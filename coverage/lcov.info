@@ -1,5 +1,5 @@
 TN:
-SF:src/metrics.js
+SF:src\metrics.js
 FN:8,(anonymous_0)
 FN:12,(anonymous_1)
 FN:15,(anonymous_2)
@@ -213,7 +213,6 @@ DA:236,0
 DA:238,0
 DA:240,0
 DA:242,0
-DA:243,0
 DA:244,0
 DA:248,0
 DA:249,0
@@ -532,7 +531,7 @@ BRF:172
 BRH:57
 end_of_record
 TN:
-SF:src/util.js
+SF:src\util.js
 FN:12,handleOutput
 FN:39,getOwnerAndPackageName
 FNF:2

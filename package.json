@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npx tsc",
     "test": "jest --testPathPattern=src/",
-    "test:coverage": "jest --testPathPattern=src/ --coverage"
+    "test:coverage": "jest --testPathPattern=src/ --coverage --json --outputFile=test_cov.json > NUL 2>&1"
   },
   "author": "",
   "license": "ISC",

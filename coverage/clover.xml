@@ -70,7 +70,7 @@
       <line num="107" count="0" type="stmt"/>
       <line num="108" count="0" type="cond" truecount="0" falsecount="2"/>
       <line num="109" count="0" type="stmt"/>
-      <line num="110" count="0" type="stmt"/>
+      <line num="110" count="0" type="cond" truecount="0" falsecount="2"/>
       <line num="111" count="0" type="stmt"/>
       <line num="112" count="0" type="stmt"/>
       <line num="113" count="0" type="stmt"/>
