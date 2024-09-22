@@ -13,10 +13,14 @@ const log_levels = ['warn', 'info', 'debug'];
 const LOG_LEVEL: number = parseInt(process.env.LOG_LEVEL ?? '0', 10);
 const LOG_FILE = process.env.LOG_FILE;
 
+if (typeof LOG_FILE === 'string' && fs.existsSync(LOG_FILE)) {
+    fs.rmSync(LOG_FILE);
+}
+
 winston.configure({
     level: log_levels[LOG_LEVEL],
     transports: [
-        new winston.transports.File({ filename: LOG_FILE, options: { flags: 'w' } }),
+        new winston.transports.File({ filename: LOG_FILE }),
     ]
 });
 winston.remove(winston.transports.Console);

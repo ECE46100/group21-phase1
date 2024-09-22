@@ -259,7 +259,7 @@ async function BusFactor(packageUrl: string, packagePath: string): Promise<numbe
         });
 
         /* Filter contributors with 5+ commits */
-        const activeContributors = Object.values(contributorCommits).filter(commitCount => commitCount >= 5).length;
+        const activeContributors = Object.values(contributorCommits).filter(commitCount => commitCount >= 1).length;
         const score = activeContributors >= 10 ? 1 : activeContributors / 10;
 
         return score;
@@ -280,7 +280,15 @@ async function Correctness(packageUrl: string, packagePath: string): Promise<num
     winston.log('info', "Calculating Correctness metric");
 
     const [dependencyResult, lintingResult] = await Promise.allSettled([
-        dependencyAnalysis(packagePath),
+        dependencyAnalysis(packagePath).finally(async () => {
+            const packageName = path.basename(packagePath).split(' ')[1];
+            const tempProjectPath = path.join(process.cwd(), `temp-${packageName}`);
+            try {
+                await fs.promises.rm(tempProjectPath, { recursive: true, force: true });
+            } catch (err) {
+                winston.log('error', `Error deleting temporary directory: ${err}`);
+            }
+        }),
         linting(packagePath),
     ]);
 
@@ -307,56 +315,42 @@ async function Correctness(packageUrl: string, packagePath: string): Promise<num
 
 /**
  * @function dependencyAnalysis
- * @description Perform dependency analysis on the package, by running npm audit in each directory with a package.json file.
- * @param {string} packagePath - The path to the cloned repository.
- * @returns {number[]} - The number of dependencies with each vulnerability level (low, moderate, high, critical).
+ * @description Perform dependency analysis on the package by creating a dummy Node.js project,
+ * installing the package, and running npm audit.
+ * @param {string} packagePath - The path to the cloned repository or package to install.
+ * @returns {Promise<number[]>} - The number of dependencies with each vulnerability level (low, moderate, high, critical).
  */
 async function dependencyAnalysis(packagePath: string): Promise<number> {
-    return new Promise((resolve, reject) => {
-        /* 
-            This does "shell out" the npm audit command, however this was done because:
-            1. The command is not based on user inputs.
-            2. I could not find a suitable library for running npm commands.
-        */
-        fs.readFile(path.join(packagePath, 'package.json'), 'utf8', (err, data) => {
+    const packageName = path.basename(packagePath).split(' ')[1];
+    const tempProjectPath = path.join(process.cwd(), `temp-${packageName}`);
+
+    return new Promise<number>((resolve, reject) => {
+        // Step 1: Create a temporary directory for the dummy project
+        fs.mkdir(tempProjectPath, { recursive: true }, (err) => {
             if (err) {
-                reject(new Error(`Error reading package.json: ${err}`));
+                return reject(new Error(`Error creating temporary directory: ${err}`));
             }
-            winston.log('debug', `Reading package.json: ${data}`);
-            const packageJson = JSON.parse(data);
-            winston.log('debug', `Parsed package.json: ${JSON.stringify(packageJson)}`);
-            /* Replace link with file (if they exist) - yarn supports 'link' but npm does not */
-            if (packageJson.dependencies) {
-                for (const [dep, version] of Object.entries(packageJson.dependencies)) {
-                    if (typeof version === 'string' && version.trim().startsWith('link')) {
-                        packageJson.dependencies[dep] = 'file' + version.trim().slice(4);
-                        winston.log('debug', `Replacing link with file for ${dep}`);
-                    }
+
+            const init = spawn('npm', ['init', '-y'], { cwd: tempProjectPath });
+
+            init.on('close', (code) => {
+                if (code !== 0) {
+                    return reject(new Error(`Error initializing npm project: ${code}`));
                 }
-            }
-            if (packageJson.devDependencies) {
-                for (const [dep, version] of Object.entries(packageJson.devDependencies)) {
-                    if (typeof version === 'string' && version.trim().startsWith('link')) {
-                        packageJson.devDependencies[dep] = 'file' + version.trim().slice(4);
-                        winston.log('debug', `Replacing link with file for ${dep}`);
-                    }
-                }
-            }
-            fs.writeFile(path.join(packagePath, 'package.json'), JSON.stringify(packageJson), (err) => {
-                if (err) {
-                    reject(new Error(`Error writing package.json: ${err}`));
-                }
-                /* 
-                    Run npm audit in the package directory - use legacy just in case their dependencies have conflicts 
-                    Installing first is faster (not sure why).
-                */
-                const install = spawn('npm', ['install', '--legacy-peer-deps'], { cwd: packagePath });
+
+                const install = spawn('npm', ['install', packageName], { cwd: tempProjectPath });
+
+                install.on('stderr', (data) => {
+                    winston.log('debug', `npm install stderr: ${data}`);
+                });
+
                 install.on('close', (code) => {
                     if (code !== 0) {
-                        reject(new Error(`Error running npm install: ${code}`));
+                        return reject(new Error(`Error installing package: ${code}`));
                     }
-                    const audit = spawn('npm', ['audit', '--json'], { cwd: packagePath });
-                    let jsonFromAudit = "";
+
+                    const audit = spawn('npm', ['audit', '--json'], { cwd: tempProjectPath });
+                    let jsonFromAudit = '';
 
                     audit.stdout.on('data', (data) => {
                         jsonFromAudit += data;
@@ -368,11 +362,9 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                             const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
                             winston.log('debug', `Vulnerabilities found: ${JSON.stringify(vulnerabilitiesJson)}`);
                             const levels = ['low', 'moderate', 'high', 'critical'];
-                            const vulnerabilities: number[] = [];
-                            for (let i = 0; i < levels.length; i++) {
-                                vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
-                            }
+                            const vulnerabilities = levels.map(level => vulnerabilitiesJson[level] || 0);
                             winston.log('debug', `Vulnerabilities: ${vulnerabilities}`);
+
                             const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc + (curr * (0.02 + idx / 50)), 0);
                             resolve(Math.max(auditScore, 0));
                         } catch (error) {

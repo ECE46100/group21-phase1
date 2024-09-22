@@ -11,3 +11,4 @@ coverage_output.txt
 NUL
 test_cov.json
 /coverage
+/dist
