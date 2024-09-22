@@ -15,9 +15,9 @@ install() {
 
 # Function to run tests (sort of)
 run_tests() {
-    npm run build
+    npm run build >/dev/null 2>&1
     npm run test:coverage --silent
-    npm run test -- --coverage > cov_out.txt 2> NUL
+    npm run test -- --coverage > cov_out.txt 2> /dev/null 2>&1
 
     passed=$(egrep -o '"numPassedTests":[0-9]{2}' test_cov.json)
     num_passed=$(echo $passed | egrep -o '[0-9]{2}')
@@ -27,11 +27,11 @@ run_tests() {
 
     percent=$(grep -w "All files" cov_out.txt | awk '{print $10}')
 
-    echo "Total: $num_total"
-    echo "Passed: $num_passed"
-    echo "Coverage: $percent%"
-    echo "$num_passed/$num_total test cases passed. $percent% line coverage acheived."
-
+    # echo "Total: $num_total"
+    # echo "Passed: $num_passed"
+    # echo "Coverage: $percent%"
+    echo -n "$num_passed/$num_total test cases passed. $percent% line coverage achieved."
+    
     exit 0;
 }
 
@@ -41,7 +41,7 @@ process_urls() {
     URL_FILE=$1
     if [ -f "$URL_FILE" ]; then
         # To make it faster : pre-compile the processUrl.ts and just run the js file as below
-        npm run build
+        npm run build >/dev/null 2>&1
         node src/processUrls.js "$URL_FILE"
         if [ $? -eq 0 ]; then
             exit 0
