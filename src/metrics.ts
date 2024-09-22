@@ -272,6 +272,11 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
         } else {
             console.error('Error calculating activeContributorsMetric:', error);
         }
+        if (error instanceof Error) {
+            console.error(`Error calculating activeContributorsMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating activeContributorsMetric:', error);
+        }
         return 0;
     }
 }
