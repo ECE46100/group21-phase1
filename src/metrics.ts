@@ -697,4 +697,4 @@ if (!threading.isMainThread) {
     });
 }
 
-export { computeMetrics, Correctness, linting, dependencyAnalysis, RampUp, License, BusFactor, ResponsiveMaintainer };
+export { computeMetrics, Correctness, linting, dependencyAnalysis, RampUp, License, BusFactor, ResponsiveMaintainer, license_thru_files };
