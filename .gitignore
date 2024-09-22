@@ -5,3 +5,8 @@ package-lock.json
 src/*.js
 ./.vscode
 ./dist
+./app.log
+./cov_out.txt
+./coverage_output.txt
+./NUL
+./test_cov.json
