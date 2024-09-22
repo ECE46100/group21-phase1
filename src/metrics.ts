@@ -526,22 +526,26 @@ function analyzeCodeComments(files: string[]): { commentLines: number, totalLine
  * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
  */
 
-export async function license(packageUrl: string, packagePath: string): Promise<number> {
+async function license(packageUrl: string, packagePath: string): Promise<number> {
 
     let score = 0;
 
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+
     try {
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
-        const url = `https://api.github.com/repos/${owner}/${packageName}/git/trees/master?recursive=1`;
+        const url = `https://api.github.com/repos/${owner}/${packageName}/license`;
+ 
         const response = await axios.get(url, {
             headers: {
                 Accept: 'application/vnd.github+json',
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
-        console.log(response.data);
-        score = 1;
+        
+        if (response.data.license?.spdx_id == 'LGPL-2.1' || response.data.license?.spdx_id == 'LGPL-2.1-only' || response.data.license?.spdx_id == 'MIT') {
+            score = 1;
+        }
     }
     catch (error) {
         if (error instanceof Error) {
@@ -571,4 +575,4 @@ if (!threading.isMainThread) {
     
 }
 
-export default computeMetrics;
+export { computeMetrics, license, correctness, linting, dependencyAnalysis };
