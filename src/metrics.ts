@@ -1,9 +1,9 @@
-/**
- * computeMetrics is the only externally accessible function from this file. It facilitates running
- * multiple metrics in parallel. To add a metric calculation, create a function definition that follows the 
- * typing (type metricFunction) and add the function name to the metrics array. Metric functions must be 
- * asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
- */
+/*
+    computeMetrics is the only externally accessible function from this file. It facilitates running
+    multiple metrics in parallel. To add a metric calculation, create a function definition that follows the 
+    typing (type metricFunction) and add the function name to the metrics array. Metric functions must be 
+    asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
+*/
 
 import * as threading from 'worker_threads';
 import * as path from 'path';
@@ -14,19 +14,36 @@ import { handleOutput, getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
 import { ESLint } from 'eslint';
 import * as fs from 'fs';
+import * as winston from 'winston';
 
 dotenv.config();
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? ''
 const ESLINT_CONFIG = path.join(process.cwd(), 'src', 'eslint_package.config.mjs');
+
+const log_levels = ['warn', 'info', 'debug'];
+const LOG_LEVEL: number = parseInt(process.env.LOG_LEVEL ?? '0', 10);
+const LOG_FILE = process.env.LOG_FILE;
+
+winston.configure({
+    level: log_levels[LOG_LEVEL],
+    transports: [
+        new winston.transports.File({ filename: LOG_FILE })
+    ]
+});
+winston.remove(winston.transports.Console);
 
 /**
  * @type metricFunction
  * @description Type for metric calculating functions, should only return the result of the calculation.
  */
 type metricFunction = (packageUrl: string, packagePath: string) => Promise<number>;
-// const metrics: metricFunction[] = [busFactor, maintainerActiveness, correctness, rampUpTime];
-const metrics: metricFunction[] = [busFactor, maintainerActiveness, rampUpTime];
-// const metrics: metricFunction[] = [busFactor, maintainerActiveness];
+const metrics: metricFunction[] = [
+    busFactor,
+    maintainerActiveness,
+    correctness
+];
+
+const weights: Record<string, number> = { busFactor: 0.3, maintainerActiveness: 0.3, correctness: 0.4 };
 
 /**
  * @interface metricPair
@@ -85,9 +102,15 @@ async function computeMetrics(packageUrl: string, packagePath: string): Promise<
                 completed++;
 
                 if (completed === metrics.length) {
+                    const netScore = results.reduce((acc, curr) => {
+                        const metricName: string = Object.keys(curr)[0];
+                        const metricScore = Math.max(0, curr[metricName]);
+                        const metricWeight = weights[metricName];
+                        return acc + metricScore * metricWeight;
+                    }, 0);
                     const finalResult: packageResult = {
                         URL: packageUrl,
-                        NetScore: results.reduce((acc, curr) => acc + curr[Object.keys(curr)[0]], 0) / metrics.length,
+                        NetScore: netScore,
                         NetScore_Latency: (Date.now() - netScoreStart) / 1000,
                         ...results.reduce((acc, curr) => ({ ...acc, ...curr }), {})
                     };
@@ -252,9 +275,12 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
  * @returns {number} - The score for correctness, calculated as a weighted sum of the dependency and linting scores.
  */
 async function correctness(packageUrl: string, packagePath: string): Promise<number> {
+    winston.log('info', "Calculating correctness metric");
     const dependencyScore = await dependencyAnalysis(packagePath);
+    winston.log('info', `Dependency score calculated, ${dependencyScore}`);
     const lintingScore = await linting(packagePath);
-    return (lintingScore + dependencyScore) * 0.5;
+    winston.log('info', `Linting score calculated, ${lintingScore}`);
+    return Math.max(0, (lintingScore + dependencyScore) * 0.5);
 }
 
 /**
@@ -265,9 +291,10 @@ async function correctness(packageUrl: string, packagePath: string): Promise<num
  */
 async function dependencyAnalysis(packagePath: string): Promise<number> {
     return new Promise((resolve, reject) => {
-        /* This does "shell out" the npm audit command, however this was done because:
-        *  1. The command is not based on user inputs.
-        *  2. I could not find a suitable library for running npm commands.
+        /* 
+            This does "shell out" the npm audit command, however this was done because:
+            1. The command is not based on user inputs.
+            2. I could not find a suitable library for running npm commands.
         */
         fs.readFile(path.join(packagePath, 'package.json'), 'utf8', (err, data) => {
             if (err) {
@@ -279,6 +306,7 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                 for (const [dep, version] of Object.entries(packageJson.dependencies)) {
                     if (typeof version === 'string' && version.trim().startsWith('link')) {
                         packageJson.dependencies[dep] = 'file' + version.trim().slice(4);
+                        winston.log('debug', `Replacing link with file for ${dep}`);
                     }
                 }
             }
@@ -286,6 +314,7 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                 for (const [dep, version] of Object.entries(packageJson.devDependencies)) {
                     if (typeof version === 'string' && version.trim().startsWith('link')) {
                         packageJson.devDependencies[dep] = 'file' + version.trim().slice(4);
+                        winston.log('debug', `Replacing link with file for ${dep}`);
                     }
                 }
             }
@@ -293,28 +322,39 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                 if (err) {
                     reject(new Error(`Error writing package.json: ${err}`));
                 }
-                /* Run npm audit in the package directory - force just in case their dependencies have conflicts */
-                const audit = spawn('npm', ['audit', '--no-package-lock', '--force', '--json'], { cwd: packagePath });
-                let jsonFromAudit = "";
-
-                audit.stdout.on('data', (data) => {
-                    jsonFromAudit += data;
-                });
-
-                audit.on('close', () => {
-                    try {
-                        const auditData = JSON.parse(jsonFromAudit);
-                        const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
-                        const levels = ['low', 'moderate', 'high', 'critical'];
-                        const vulnerabilities: number[] = [];
-                        for (let i = 0; i < levels.length; i++) {
-                            vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
-                        }
-                        const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc * (curr * (0.5 - idx / 10)), 1);
-                        resolve(auditScore);
-                    } catch (error) {
-                        reject(new Error(`Error parsing npm audit JSON: ${error}`));
+                /* 
+                    Run npm audit in the package directory - use legacy just in case their dependencies have conflicts 
+                    Installing first is faster (not sure why).
+                */
+                const install = spawn('npm', ['install', '--package-lock-only', '--legacy-peer-deps'], { cwd: packagePath });
+                install.on('close', (code) => {
+                    if (code !== 0) {
+                        reject(new Error(`Error running npm install: ${code}`));
                     }
+                    const audit = spawn('npm', ['audit', '--json'], { cwd: packagePath });
+                    let jsonFromAudit = "";
+
+                    audit.stdout.on('data', (data) => {
+                        jsonFromAudit += data;
+                    });
+
+                    audit.on('close', () => {
+                        try {
+                            const auditData = JSON.parse(jsonFromAudit);
+                            const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
+                            winston.log('debug', `Vulnerabilities found: ${JSON.stringify(vulnerabilitiesJson)}`);
+                            const levels = ['low', 'moderate', 'high', 'critical'];
+                            const vulnerabilities: number[] = [];
+                            for (let i = 0; i < levels.length; i++) {
+                                vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                            }
+                            winston.log('debug', `Vulnerabilities: ${vulnerabilities}`);
+                            const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc + (curr * (0.02 + idx / 50)), 0);
+                            resolve(auditScore);
+                        } catch (error) {
+                            reject(new Error(`Error parsing npm audit JSON: ${error}`));
+                        }
+                    });
                 });
             });
         });
@@ -341,6 +381,7 @@ async function linting(packagePath: string): Promise<number> {
 
         /* Run the linter and sum the error counts */
         eslint.lintFiles(pattern).then((results) => {
+            winston.log('debug', `Linting results: ${JSON.stringify(results)}`);
             const errorCount = results.reduce((acc, curr) => acc + curr.errorCount, 0);
             const filesLinted = results.length;
             const lintScore = 1 - (errorCount / filesLinted / 10);
