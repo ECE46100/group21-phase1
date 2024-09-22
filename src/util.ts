@@ -5,7 +5,7 @@
  * @param {string} errorMessage - Optional error message to log.
  * @param {number} endpoint - Display endpoint for output (0: console, 1: log file).
  */
-export async function handleOutput(message = '', errorMessage = '', endpoint = 0): Promise<void> {
+export function handleOutput(message = '', errorMessage = '', endpoint = 0): void {
     switch(endpoint) { 
         case 0: { 
             if (message != '') console.log(message);
