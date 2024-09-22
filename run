@@ -29,7 +29,7 @@ run_tests() {
 
 # Function to process URLs using TypeScript
 process_urls() {
-    echo -e "start processing urls...\\n"
+    # echo -e "start processing urls...\\n"
     URL_FILE=$1
     if [ -f "$URL_FILE" ]; then
         # To make it faster : pre-compile the processUrl.ts and just run the js file as below

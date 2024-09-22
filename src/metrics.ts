@@ -38,14 +38,14 @@ winston.remove(winston.transports.Console);
  */
 type metricFunction = (packageUrl: string, packagePath: string) => Promise<number>;
 const metrics: metricFunction[] = [
-    busFactor,
-    maintainerActiveness,
-    rampUpTime,
-    correctness,
-    license,
+    BusFactor,
+    ResponsiveMaintainer,
+    RampUp,
+    Correctness,
+    License,
 ];
 
-const weights: Record<string, number> = { busFactor: 0.25, license: 0.25, maintainerActiveness: 0.2, correctness: 0.1, rampUpTime: 0.2 };
+const weights: Record<string, number> = { BusFactor: 0.25, License: 0.25, ResponsiveMaintainer: 0.2, Correctness: 0.1, RampUp: 0.2 };
 
 /**
  * @interface metricPair
@@ -120,7 +120,7 @@ async function computeMetrics(packageUrl: string, packagePath: string): Promise<
                     
                     Promise.all(terminationPromises).then(() => {
                         resolve(finalResult);
-                    }).catch((error: unknown) => { console.log(error) });
+                    }).catch((error: unknown) => { });
                 } else {
                     startNewWorker(started++);
                 }
@@ -185,20 +185,20 @@ async function countIssue(owner: string, repo: string, state: string): Promise<n
         }
         return response.data.length;
     } catch (error) {
-        console.error(`Error fetching ${state} issues for ${owner}/${repo}:`, error);
+        // console.error(`Error fetching ${state} issues for ${owner}/${repo}:`, error);
         return 0;
     }
 }
 
 /**
- * @function maintainerActiveness
- * @description A metric that uses GH API to get (1- #openIssue/#allIssue) as maintainerActiveness score.
+ * @function ResponsiveMaintainer
+ * @description A metric that uses GH API to get (1- #openIssue/#allIssue) as ResponsiveMaintainer score.
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {number} score - The score for maintainerActiveness, calculated as (1- #openIssue/#allIssue), 
+ * @returns {number} score - The score for ResponsiveMaintainer, calculated as (1- #openIssue/#allIssue), 
  *                           if no issue was found it returns 1.
  */
-async function maintainerActiveness(packageUrl: string, packagePath: string): Promise<number> {
+async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Promise<number> {
     let score = 0;
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
@@ -219,13 +219,13 @@ async function maintainerActiveness(packageUrl: string, packagePath: string): Pr
 }
 
 /**
- * @function busFactor
+ * @function BusFactor
  * @description A metric that calculates the number of contributors with 5+ commits in the last year.
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {Promise<number>} - The score for busFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
+ * @returns {Promise<number>} - The score for BusFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
  */
-async function busFactor(packageUrl: string, packagePath: string): Promise<number> {
+async function BusFactor(packageUrl: string, packagePath: string): Promise<number> {
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
@@ -264,24 +264,44 @@ async function busFactor(packageUrl: string, packagePath: string): Promise<numbe
 
         return score;
     } catch (error) {
-        console.error(`Error calculating activeContributorsMetric: ${error}`);
+        // console.error(`Error calculating activeContributorsMetric: ${error}`);
         return 0;
     }
 }
 
 /**
- * @function correctness
- * @description A metric that calculates the "correctness" of the package through a combination of dependency analysis and linting
+ * @function Correctness
+ * @description A metric that calculates the "Correctness" of the package through a combination of dependency analysis and linting
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - The path to the cloned repository.
- * @returns {number} - The score for correctness, calculated as a weighted sum of the dependency and linting scores.
+ * @returns {number} - The score for Correctness, calculated as a weighted sum of the dependency and linting scores.
  */
-async function correctness(packageUrl: string, packagePath: string): Promise<number> {
-    winston.log('info', "Calculating correctness metric");
-    const dependencyScore = await dependencyAnalysis(packagePath);
-    winston.log('info', `Dependency score calculated, ${dependencyScore}`);
-    const lintingScore = await linting(packagePath);
-    winston.log('info', `Linting score calculated, ${lintingScore}`);
+async function Correctness(packageUrl: string, packagePath: string): Promise<number> {
+    winston.log('info', "Calculating Correctness metric");
+
+    const [dependencyResult, lintingResult] = await Promise.allSettled([
+        dependencyAnalysis(packagePath),
+        linting(packagePath),
+    ]);
+
+    const dependencyScore = dependencyResult.status === 'fulfilled' ? dependencyResult.value : 0;
+    const lintingScore = lintingResult.status === 'fulfilled' ? lintingResult.value : 0;
+
+    if (dependencyResult.status === 'fulfilled') {
+        winston.log('info', `Dependency score calculated, ${dependencyScore}`);
+    } else {
+        winston.log('error', `Dependency analysis failed: ${dependencyResult.reason}`);
+    }
+
+    if (lintingResult.status === 'fulfilled') {
+        winston.log('info', `Linting score calculated, ${lintingScore}`);
+    } else {
+        winston.log('error', `Linting analysis failed: ${lintingResult.reason}`);
+    }
+    /* If both fail, reject the promise */
+    if (dependencyResult.status === 'rejected' && lintingResult.status === 'rejected') {
+        throw new Error(`Dependency analysis and linting failed: ${dependencyResult.reason}, ${lintingResult.reason}`);
+    }
     return Math.max(0, (lintingScore + dependencyScore) * 0.5);
 }
 
@@ -302,7 +322,9 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
             if (err) {
                 reject(new Error(`Error reading package.json: ${err}`));
             }
+            winston.log('debug', `Reading package.json: ${data}`);
             const packageJson = JSON.parse(data);
+            winston.log('debug', `Parsed package.json: ${JSON.stringify(packageJson)}`);
             /* Replace link with file (if they exist) - yarn supports 'link' but npm does not */
             if (packageJson.dependencies) {
                 for (const [dep, version] of Object.entries(packageJson.dependencies)) {
@@ -328,7 +350,7 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                     Run npm audit in the package directory - use legacy just in case their dependencies have conflicts 
                     Installing first is faster (not sure why).
                 */
-                const install = spawn('npm', ['install', '--package-lock-only', '--legacy-peer-deps'], { cwd: packagePath });
+                const install = spawn('npm', ['install', '--legacy-peer-deps'], { cwd: packagePath });
                 install.on('close', (code) => {
                     if (code !== 0) {
                         reject(new Error(`Error running npm install: ${code}`));
@@ -352,7 +374,7 @@ async function dependencyAnalysis(packagePath: string): Promise<number> {
                             }
                             winston.log('debug', `Vulnerabilities: ${vulnerabilities}`);
                             const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc + (curr * (0.02 + idx / 50)), 0);
-                            resolve(auditScore);
+                            resolve(Math.max(auditScore, 0));
                         } catch (error) {
                             reject(new Error(`Error parsing npm audit JSON: ${error}`));
                         }
@@ -387,7 +409,7 @@ async function linting(packagePath: string): Promise<number> {
             const errorCount = results.reduce((acc, curr) => acc + curr.errorCount, 0);
             const filesLinted = results.length;
             const lintScore = 1 - (errorCount / filesLinted / 10);
-            resolve(lintScore);
+            resolve(Math.max(lintScore, 0));
         }).catch((error: unknown) => {
             reject(new Error(`${error}`));
         });
@@ -395,14 +417,14 @@ async function linting(packagePath: string): Promise<number> {
 }
 
 /**
- * @function rampUpTime
+ * @function RampUp
  * @description Calculates the ramp-up time based on the presence of documentation and code comments.
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - The path to the cloned repository.
  * @returns {Promise<number>} - The score for ramp-up time between 0 and 1.
  */
-async function rampUpTime(packageUrl: string, packagePath: string): Promise<number> {
-    /* Analyze README, can either make readmeScore 0 if there's error or simply throw an error and skip the rampUpTime function */
+async function RampUp(packageUrl: string, packagePath: string): Promise<number> {
+    /* Analyze README, can either make readmeScore 0 if there's error or simply throw an error and skip the RampUp function */
     const readmePath = findReadmeFile(packagePath);
     let readmeScore = 0;
     if (readmePath) {
@@ -519,14 +541,14 @@ function analyzeCodeComments(files: string[]): { commentLines: number, totalLine
 }
 
 /**
- * @function license
- * @description A metric that calculates if the package has a conforming LGPLv2.1 license
+ * @function License
+ * @description A metric that calculates if the package has a conforming LGPLv2.1 License
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
+ * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(License, LGPLv2.1))
  */
 
-async function license(packageUrl: string, packagePath: string): Promise<number> {
+async function License(packageUrl: string, packagePath: string): Promise<number> {
 
     let score = 0;
 
@@ -534,7 +556,7 @@ async function license(packageUrl: string, packagePath: string): Promise<number>
 
     try {
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
-        const url = `https://api.github.com/repos/${owner}/${packageName}/license`;
+        const url = `https://api.github.com/repos/${owner}/${packageName}/License`;
 
         const response = await axios.get(url, {
             headers: {
@@ -543,15 +565,15 @@ async function license(packageUrl: string, packagePath: string): Promise<number>
             }
         });
 
-        if (response.data.license?.spdx_id == 'LGPL-2.1' || response.data.license?.spdx_id == 'LGPL-2.1-only' || response.data.license?.spdx_id == 'MIT') {
+        if (response.data.License?.spdx_id == 'LGPL-2.1' || response.data.License?.spdx_id == 'LGPL-2.1-only' || response.data.License?.spdx_id == 'MIT') {
             score = 1;
         }
     }
     catch (error) {
         if (error instanceof Error) {
-            console.error(`Error calculating licenseMetric: ${error.message}`);
+            // console.error(`Error calculating LicenseMetric: ${error.message}`);
         } else {
-            console.error('Error calculating licenseMetric:', error);
+            // console.error('Error calculating LicenseMetric:', error);
         }
         return 0;
     }
@@ -572,4 +594,4 @@ if (!threading.isMainThread) {
     });
 }
 
-export { computeMetrics, correctness, linting, dependencyAnalysis, rampUpTime, license, busFactor, maintainerActiveness };
+export { computeMetrics, Correctness, linting, dependencyAnalysis, RampUp, License, BusFactor, ResponsiveMaintainer };

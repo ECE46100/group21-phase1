@@ -17,7 +17,7 @@ describe('Correctness Metric: Linting', () => {
         (winston.log as jest.Mock).mockClear();
     });
 
-    test('Test 1: Successful', async () => {
+    test('should be successful', async () => {
         const lintResults = [
             { errorCount: 0, filePath: 'src/index.js' },
             { errorCount: 0, filePath: 'src/utils.js' },
@@ -29,7 +29,7 @@ describe('Correctness Metric: Linting', () => {
         expect(score).toBe(1); // Adjust based on your scoring logic
     });
 
-    test('Test 2: Error Running ESLint', async () => {
+    test('should be a path does not exist error', async () => {
         const error = new Error('Path does not exist');
         (mockESLintInstance.lintFiles as jest.Mock).mockRejectedValue(error);
         const packagePath = path.join(__dirname, 'nonexistent');
