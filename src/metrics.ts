@@ -212,12 +212,7 @@ async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Pr
 
         score = 1 - (openIssues / totalIssues);
     } catch (error) {
-        if (error instanceof Error) {
-            console.error(`Error calculating maintainerActivenessMetric: ${error.message}`);
-        } else {
-            console.error('Error calculating maintainerActivenessMetric:', error);
-        }
-        return 0;
+        throw new Error(`Error calculating maintaine activeness\nError message : ${error}`)
     }
 
     return score;
@@ -269,11 +264,7 @@ async function BusFactor(packageUrl: string, packagePath: string): Promise<numbe
 
         return score;
     } catch (error) {
-        if (error instanceof Error) {
-            console.error(`Error calculating activeContributorsMetric: ${error.message}`);
-        } else {
-            console.error('Error calculating activeContributorsMetric:', error);
-        }
+        console.error(`Error calculating activeContributorsMetric: ${error}`);
         return 0;
     }
 }
@@ -554,7 +545,7 @@ function analyzeCodeComments(files: string[]): { commentLines: number, totalLine
  * @description A metric that calculates if the package has a conforming LGPLv2.1 License
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(License, LGPLv2.1))
+ * @returns {Promise<number>} - The score for license, calculated as int(isCompatible(License, LGPLv2.1))
  */
 
 async function License(packageUrl: string, packagePath: string): Promise<number> {
@@ -573,58 +564,88 @@ async function License(packageUrl: string, packagePath: string): Promise<number>
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
-
-        if (response.data.License?.spdx_id == 'LGPL-2.1' || response.data.License?.spdx_id == 'LGPL-2.1-only' || response.data.License?.spdx_id == 'MIT') {
+        if (response.data.license?.spdx_id == 'LGPL-2.1' || response.data.license?.spdx_id == 'LGPL-2.1-only' || response.data.license?.spdx_id == 'MIT') {
             score = 1;
         }
     }
     catch (error) {
-        if (error instanceof Error) {
-            // console.error(`Error calculating LicenseMetric: ${error.message}`);
-        } else {
-            // console.error('Error calculating LicenseMetric:', error);
+        score = await license_file_runner(owner, packageName);
+        if (score == 0 && error instanceof Error) {
+            console.error(`Error calculating licenseMetric: ${error.message}`);
+        } else if (score == 0) {
+            console.error('Error calculating licenseMetric:', error);
         }
-        return 0;
+        return score;
+    }
+    if(score == 0) {
+        score = await license_file_runner(owner, packageName);
     }
     return score;
 }
 
 /**
- * @function license
- * @description A metric that calculates if the package has a conforming LGPLv2.1 license
- * @param {string} packageUrl - The GitHub repository URL.
- * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
+ * @function license_file_runner
+ * @description A function that runs the license metric through the package.json, README.md, and LICENSE files.
+ * @param {string} owner - repository owner
+ * @param {string} packageName - name of the package
+ * @returns {Promise<number>} - the license score
  */
 
-export async function license(packageUrl: string, packagePath: string): Promise<number> {
-
+async function license_file_runner(owner: string, packageName: string): Promise<number> {
     let score = 0;
+    score = await license_thru_files(owner, packageName, 'package.json')
+    if (score == 0) {
+        score = await license_thru_files(owner, packageName, 'README.md');
+    }
+    if (score == 0) {
+        score = await license_thru_files(owner, packageName, 'LICENSE');
+    }
 
-    const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+    return score;
+}
+
+/**
+ * @function license_thru_files
+ * @description A function that calculates the license score by reading the package.json, README.md, and LICENSE files.
+ * @param {string} owner - the repository owner
+ * @param {string} packageName - the name of the package
+ * @param {string} filepath - the file to read the license from
+ * @returns {Promise<number>} - the license score
+ */
+async function license_thru_files(owner: string, packageName: string, filepath: string): Promise<number> {
+    let score = 0;
     try {
-        if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
-        const url = `https://api.github.com/repos/${owner}/${packageName}/git/trees/master?recursive=1`;
+        const url = `https://api.github.com/repos/${owner}/${packageName}/contents/${filepath}`;
         const response = await axios.get(url, {
             headers: {
                 Accept: 'application/vnd.github+json',
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
-        console.log(response.data);
-        score = 1;
+        const result = atob(response.data.content);
+
+        if (filepath == 'package.json') {
+            const json_result = JSON.parse(result);
+            if (json_result.license == "MIT" || json_result.license == "LGPL-2.1" || json_result.license == "LGPL-2.1-only") {
+                score = 1;
+            }
+        }
+        if (filepath == 'README.md') {
+            if (result.includes('MIT License') || result.includes('MIT license') || result.includes('LGPL-2.1 License')) {
+                score = 1;
+            }
+        }
+        if (filepath == 'LICENSE') {
+            if (result.includes('MIT License') || result.includes('MIT license') || result.includes('LGPL-2.1 License')) {
+                score = 1;
+            }
+        }
     }
     catch (error) {
-        if (error instanceof Error) {
-            console.error(`Error calculating licenseMetric: ${error.message}`);
-        } else {
-            console.error('Error calculating licenseMetric:', error);
-        }
-        return 0;
+        return score;
     }
     return score;
 }
-
 
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData as { metricIndex: number, url: string, path: string };

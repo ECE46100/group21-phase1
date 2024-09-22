@@ -32,6 +32,7 @@ var __asyncValues = (this && this.__asyncValues) || function (o) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processURLs = processURLs;
 const fs = __importStar(require("fs"));
@@ -40,7 +41,20 @@ const simple_git_1 = __importDefault(require("simple-git"));
 const axios_1 = __importDefault(require("axios"));
 const url_1 = require("url");
 const util_1 = require("./util");
-const metrics_1 = __importDefault(require("./metrics"));
+const metrics_1 = require("./metrics");
+const winston = __importStar(require("winston"));
+const dotenv = __importStar(require("dotenv"));
+dotenv.config();
+const log_levels = ['warn', 'info', 'debug'];
+const LOG_LEVEL = parseInt((_a = process.env.LOG_LEVEL) !== null && _a !== void 0 ? _a : '0', 10);
+const LOG_FILE = process.env.LOG_FILE;
+winston.configure({
+    level: log_levels[LOG_LEVEL],
+    transports: [
+        new winston.transports.File({ filename: LOG_FILE, options: { flags: 'w' } }),
+    ]
+});
+winston.remove(winston.transports.Console);
 /**
  * @function readURLFile
  * @description Reads a file line by line and extracts the URLs.
@@ -158,7 +172,7 @@ async function processURLs(filePath) {
                 const packageName = pathSegments[1].replace('.git', '');
                 try {
                     await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
-                    await (0, metrics_1.default)(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`)
+                    await (0, metrics_1.computeMetrics)(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`)
                         .then(async (result) => {
                         /* First tell TS that resultOgj (made from result) can be indexed with a string */
                         const resultObj = result;

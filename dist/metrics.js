@@ -1,10 +1,10 @@
 "use strict";
-/**
- * computeMetrics is the only externally accessible function from this file. It facilitates running
- * multiple metrics in parallel. To add a metric calculation, create a function definition that follows the
- * typing (type metricFunction) and add the function name to the metrics array. Metric functions must be
- * asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
- */
+/*
+    computeMetrics is the only externally accessible function from this file. It facilitates running
+    multiple metrics in parallel. To add a metric calculation, create a function definition that follows the
+    typing (type metricFunction) and add the function name to the metrics array. Metric functions must be
+    asynchronous (return promises). metricSample shows how to make a synchronous function asynchronous.
+*/
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -31,9 +31,17 @@ var __importStar = (this && this.__importStar) || function (mod) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _a, _b;
+var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.license_thru_files = void 0;
+exports.computeMetrics = computeMetrics;
+exports.correctness = correctness;
+exports.linting = linting;
+exports.dependencyAnalysis = dependencyAnalysis;
+exports.rampUpTime = rampUpTime;
 exports.license = license;
+exports.busFactor = busFactor;
+exports.maintainerActiveness = maintainerActiveness;
 const threading = __importStar(require("worker_threads"));
 const path = __importStar(require("path"));
 const os_1 = require("os");
@@ -43,10 +51,30 @@ const util_1 = require("./util");
 const dotenv = __importStar(require("dotenv"));
 const eslint_1 = require("eslint");
 const fs = __importStar(require("fs"));
+const winston = __importStar(require("winston"));
+const license_test_1 = require("./license_test");
+Object.defineProperty(exports, "license_thru_files", { enumerable: true, get: function () { return license_test_1.license_thru_files; } });
 dotenv.config();
 const GITHUB_TOKEN = (_a = process.env.GITHUB_TOKEN) !== null && _a !== void 0 ? _a : '';
 const ESLINT_CONFIG = path.join(process.cwd(), 'src', 'eslint_package.config.mjs');
-const metrics = [busFactor, maintainerActiveness, correctness];
+const log_levels = ['warn', 'info', 'debug'];
+const LOG_LEVEL = parseInt((_b = process.env.LOG_LEVEL) !== null && _b !== void 0 ? _b : '0', 10);
+const LOG_FILE = process.env.LOG_FILE;
+winston.configure({
+    level: log_levels[LOG_LEVEL],
+    transports: [
+        new winston.transports.File({ filename: LOG_FILE })
+    ]
+});
+winston.remove(winston.transports.Console);
+const metrics = [
+    busFactor,
+    maintainerActiveness,
+    rampUpTime,
+    correctness,
+    license,
+];
+const weights = { busFactor: 0.25, license: 0.25, maintainerActiveness: 0.2, correctness: 0.1, rampUpTime: 0.2 };
 ;
 /**
  * @function computeMetrics
@@ -81,7 +109,13 @@ async function computeMetrics(packageUrl, packagePath) {
                 });
                 completed++;
                 if (completed === metrics.length) {
-                    const finalResult = Object.assign({ URL: packageUrl, NetScore: results.reduce((acc, curr) => acc + curr[Object.keys(curr)[0]], 0) / metrics.length, NetScore_Latency: (Date.now() - netScoreStart) / 1000 }, results.reduce((acc, curr) => (Object.assign(Object.assign({}, acc), curr)), {}));
+                    const netScore = results.reduce((acc, curr) => {
+                        const metricName = Object.keys(curr)[0];
+                        const metricScore = Math.max(0, curr[metricName]);
+                        const metricWeight = weights[metricName];
+                        return acc + metricScore * metricWeight;
+                    }, 0);
+                    const finalResult = Object.assign({ URL: packageUrl, NetScore: netScore, NetScore_Latency: (Date.now() - netScoreStart) / 1000 }, results.reduce((acc, curr) => (Object.assign(Object.assign({}, acc), curr)), {}));
                     const terminationPromises = metricThreads.map(worker => worker.terminate());
                     Promise.all(terminationPromises).then(() => {
                         resolve(finalResult);
@@ -171,13 +205,7 @@ async function maintainerActiveness(packageUrl, packagePath) {
         score = 1 - (openIssues / totalIssues);
     }
     catch (error) {
-        if (error instanceof Error) {
-            console.error(`Error calculating maintainerActivenessMetric: ${error.message}`);
-        }
-        else {
-            console.error('Error calculating maintainerActivenessMetric:', error);
-        }
-        return 0;
+        throw new Error(`Error calculating maintaine activeness\nError message : ${error}`);
     }
     return score;
 }
@@ -225,12 +253,7 @@ async function busFactor(packageUrl, packagePath) {
         return score;
     }
     catch (error) {
-        if (error instanceof Error) {
-            console.error(`Error calculating activeContributorsMetric: ${error.message}`);
-        }
-        else {
-            console.error('Error calculating activeContributorsMetric:', error);
-        }
+        console.error(`Error calculating activeContributorsMetric: ${error}`);
         return 0;
     }
 }
@@ -242,9 +265,12 @@ async function busFactor(packageUrl, packagePath) {
  * @returns {number} - The score for correctness, calculated as a weighted sum of the dependency and linting scores.
  */
 async function correctness(packageUrl, packagePath) {
+    winston.log('info', "Calculating correctness metric");
     const dependencyScore = await dependencyAnalysis(packagePath);
+    winston.log('info', `Dependency score calculated, ${dependencyScore}`);
     const lintingScore = await linting(packagePath);
-    return (lintingScore + dependencyScore) * 0.5;
+    winston.log('info', `Linting score calculated, ${lintingScore}`);
+    return Math.max(0, (lintingScore + dependencyScore) * 0.5);
 }
 /**
  * @function dependencyAnalysis
@@ -254,9 +280,10 @@ async function correctness(packageUrl, packagePath) {
  */
 async function dependencyAnalysis(packagePath) {
     return new Promise((resolve, reject) => {
-        /* This does "shell out" the npm audit command, however this was done because:
-        *  1. The command is not based on user inputs.
-        *  2. I could not find a suitable library for running npm commands.
+        /*
+            This does "shell out" the npm audit command, however this was done because:
+            1. The command is not based on user inputs.
+            2. I could not find a suitable library for running npm commands.
         */
         fs.readFile(path.join(packagePath, 'package.json'), 'utf8', (err, data) => {
             if (err) {
@@ -268,6 +295,7 @@ async function dependencyAnalysis(packagePath) {
                 for (const [dep, version] of Object.entries(packageJson.dependencies)) {
                     if (typeof version === 'string' && version.trim().startsWith('link')) {
                         packageJson.dependencies[dep] = 'file' + version.trim().slice(4);
+                        winston.log('debug', `Replacing link with file for ${dep}`);
                     }
                 }
             }
@@ -275,6 +303,7 @@ async function dependencyAnalysis(packagePath) {
                 for (const [dep, version] of Object.entries(packageJson.devDependencies)) {
                     if (typeof version === 'string' && version.trim().startsWith('link')) {
                         packageJson.devDependencies[dep] = 'file' + version.trim().slice(4);
+                        winston.log('debug', `Replacing link with file for ${dep}`);
                     }
                 }
             }
@@ -282,27 +311,38 @@ async function dependencyAnalysis(packagePath) {
                 if (err) {
                     reject(new Error(`Error writing package.json: ${err}`));
                 }
-                /* Run npm audit in the package directory - force just in case their dependencies have conflicts */
-                const audit = (0, child_process_1.spawn)('npm', ['audit', '--no-package-lock', '--force', '--json'], { cwd: packagePath });
-                let jsonFromAudit = "";
-                audit.stdout.on('data', (data) => {
-                    jsonFromAudit += data;
-                });
-                audit.on('close', () => {
-                    try {
-                        const auditData = JSON.parse(jsonFromAudit);
-                        const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
-                        const levels = ['low', 'moderate', 'high', 'critical'];
-                        const vulnerabilities = [];
-                        for (let i = 0; i < levels.length; i++) {
-                            vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                /*
+                    Run npm audit in the package directory - use legacy just in case their dependencies have conflicts
+                    Installing first is faster (not sure why).
+                */
+                const install = (0, child_process_1.spawn)('npm', ['install', '--package-lock-only', '--legacy-peer-deps'], { cwd: packagePath });
+                install.on('close', (code) => {
+                    if (code !== 0) {
+                        reject(new Error(`Error running npm install: ${code}`));
+                    }
+                    const audit = (0, child_process_1.spawn)('npm', ['audit', '--json'], { cwd: packagePath });
+                    let jsonFromAudit = "";
+                    audit.stdout.on('data', (data) => {
+                        jsonFromAudit += data;
+                    });
+                    audit.on('close', () => {
+                        try {
+                            const auditData = JSON.parse(jsonFromAudit);
+                            const vulnerabilitiesJson = auditData.metadata.vulnerabilities;
+                            winston.log('debug', `Vulnerabilities found: ${JSON.stringify(vulnerabilitiesJson)}`);
+                            const levels = ['low', 'moderate', 'high', 'critical'];
+                            const vulnerabilities = [];
+                            for (let i = 0; i < levels.length; i++) {
+                                vulnerabilities[i] = vulnerabilitiesJson[levels[i]] || 0;
+                            }
+                            winston.log('debug', `Vulnerabilities: ${vulnerabilities}`);
+                            const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc + (curr * (0.02 + idx / 50)), 0);
+                            resolve(Math.max(auditScore, 0));
                         }
-                        const auditScore = 1 - vulnerabilities.reduce((acc, curr, idx) => acc * (curr * (0.5 - idx / 10)), 1);
-                        resolve(auditScore);
-                    }
-                    catch (error) {
-                        reject(new Error(`Error parsing npm audit JSON: ${error}`));
-                    }
+                        catch (error) {
+                            reject(new Error(`Error parsing npm audit JSON: ${error}`));
+                        }
+                    });
                 });
             });
         });
@@ -327,61 +367,201 @@ async function linting(packagePath) {
         const pattern = path.join(packagePath, '**/*.{js,ts}');
         /* Run the linter and sum the error counts */
         eslint.lintFiles(pattern).then((results) => {
+            winston.log('debug', `Linting results: ${JSON.stringify(results)}`);
             const errorCount = results.reduce((acc, curr) => acc + curr.errorCount, 0);
             const filesLinted = results.length;
             const lintScore = 1 - (errorCount / filesLinted / 10);
-            resolve(lintScore);
+            resolve(Math.max(lintScore, 0));
         }).catch((error) => {
-            reject(new Error(`Error running ESLint: ${error}`));
+            reject(new Error(`${error}`));
         });
     });
+}
+/**
+ * @function rampUpTime
+ * @description Calculates the ramp-up time based on the presence of documentation and code comments.
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - The path to the cloned repository.
+ * @returns {Promise<number>} - The score for ramp-up time between 0 and 1.
+ */
+async function rampUpTime(packageUrl, packagePath) {
+    /* Analyze README, can either make readmeScore 0 if there's error or simply throw an error and skip the rampUpTime function */
+    const readmePath = findReadmeFile(packagePath);
+    let readmeScore = 0;
+    if (readmePath) {
+        try {
+            const readmeContent = fs.readFileSync(readmePath, 'utf-8');
+            readmeScore = readmeContent.length > 1500 ? 1 : (readmeContent.length > 1000 ? 0.75 : (readmeContent.length > 500 ? 0.5 : 0.25));
+        }
+        catch (error) {
+            //console.error("Error reading README file", error);
+            readmeScore = 0;
+        }
+    }
+    else {
+        // console.warn('No README found in the repository');
+        readmeScore = 0;
+    }
+    /* Analyze code comments */
+    const codeFiles = getAllCodeFiles(packagePath); // Function to get all relevant code files
+    const { commentLines, totalLines } = analyzeCodeComments(codeFiles);
+    /* Calculate comment density score (assuming >10% comment lines is a good ratio) */
+    const commentDensity = commentLines / totalLines;
+    const commentScore = commentDensity > 0.2 ? 1 : (commentDensity > 0.15 ? 0.75 : (commentDensity > 0.1 ? 0.5 : 0.25));
+    /* Combine the scores (adjust weights as necessary) */
+    const rampUpScore = 0.5 * readmeScore + 0.5 * commentScore;
+    return Promise.resolve(rampUpScore);
+}
+/**
+ * @function findReadmeFile
+ * @description Recursively searches for a README file in the repository, skipping symbolic links.
+ * @param {string} dir - The directory to start the search from.
+ * @returns {string | null} - The path to the README file, or null if not found.
+ */
+function findReadmeFile(dir) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.lstatSync(fullPath);
+        if (stat.isSymbolicLink()) {
+            // Skip symbolic links to avoid loops
+            //console.warn(`Skipping symbolic link: ${fullPath}`);
+            continue;
+        }
+        if (stat.isDirectory()) {
+            const found = findReadmeFile(fullPath);
+            if (found)
+                return found;
+        }
+        else if (file.toLowerCase().startsWith('readme')) {
+            return fullPath;
+        }
+    }
+    return null;
+}
+/**
+ * @function getAllCodeFiles
+ * @description Recursively finds all relevant code files in a directory (e.g., .js, .ts files), skipping symlinks.
+ * @param {string} dir - The directory to search for code files.
+ * @returns {string[]} - A list of file paths.
+ */
+function getAllCodeFiles(dir) {
+    let codeFiles = [];
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.lstatSync(fullPath);
+        if (stat.isSymbolicLink()) {
+            //console.warn(`Skipping symbolic link: ${fullPath}`);
+            continue;
+        }
+        if (stat.isDirectory()) {
+            codeFiles = codeFiles.concat(getAllCodeFiles(fullPath)); // Recursive search in subdirectories
+        }
+        else if (file.endsWith('.ts') || file.endsWith('.js')) {
+            codeFiles.push(fullPath);
+        }
+    }
+    return codeFiles;
+}
+/**
+ * @function analyzeCodeComments
+ * @description Analyzes the number of comment lines and total lines of code in the given files.
+ * @param {string[]} files - List of code file paths.
+ * @returns {{commentLines: number, totalLines: number}} - The number of comment lines and total lines of code.
+ */
+function analyzeCodeComments(files) {
+    let commentLines = 0;
+    let totalLines = 0;
+    for (const file of files) {
+        const content = fs.readFileSync(file, 'utf-8');
+        const lines = content.split('\n');
+        totalLines += lines.length;
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || trimmedLine.startsWith('*')) {
+                commentLines++;
+            }
+        }
+    }
+    return { commentLines, totalLines };
 }
 /**
  * @function license
  * @description A metric that calculates if the package has a conforming LGPLv2.1 license
  * @param {string} packageUrl - The GitHub repository URL.
  * @param {string} packagePath - (Not used here, but required for type compatibility).
- * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
+ * @returns {Promise<number>} - The score for license, calculated as int(isCompatible(license, LGPLv2.1))
  */
 async function license(packageUrl, packagePath) {
+    var _a, _b, _c;
     let score = 0;
     const [owner, packageName] = (0, util_1.getOwnerAndPackageName)(packageUrl);
     try {
         if (GITHUB_TOKEN == '')
             throw new Error('No GitHub token specified');
-        const url = `https://api.github.com/repos/${owner}/${packageName}/git/trees/master?recursive=1`;
+        const url = `https://api.github.com/repos/${owner}/${packageName}/license`;
         const response = await axios_1.default.get(url, {
             headers: {
                 Accept: 'application/vnd.github+json',
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
-        console.log(response.data);
-        score = 1;
+        if (((_a = response.data.license) === null || _a === void 0 ? void 0 : _a.spdx_id) == 'LGPL-2.1' || ((_b = response.data.license) === null || _b === void 0 ? void 0 : _b.spdx_id) == 'LGPL-2.1-only' || ((_c = response.data.license) === null || _c === void 0 ? void 0 : _c.spdx_id) == 'MIT') {
+            score = 1;
+        }
     }
     catch (error) {
         if (error instanceof Error) {
+            await (0, license_test_1.license_thru_files)(owner, packageName, 'package.json');
             console.error(`Error calculating licenseMetric: ${error.message}`);
         }
         else {
             console.error('Error calculating licenseMetric:', error);
         }
-        return 0;
+        return score;
     }
     return score;
 }
+/**
+ * @function license_thru_files
+ * @description
+ * @param {string} packageUrl -
+ * @param {string} packagePath -
+ * @returns {Promise<number>} -
+ */
+/*async function license_thru_files(owner: string, packageName: string, filepath: string): Promise<number> {
+    const score = 0;
+    try {
+        const url = `https://api.github.com/repos/${owner}/${packageName}/contents/${filepath}`;
+        const response = await axios.get(url, {
+            headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+            }
+        });
+        console.log(response.data);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            console.error(`Error calculating licenseMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating licenseMetric:', error);
+        }
+        return 0;
+    }
+    return score;
+}*/
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData;
     const metric = metrics[metricIndex];
-    (_b = threading.parentPort) === null || _b === void 0 ? void 0 : _b.once('message', (childPort) => {
+    (_c = threading.parentPort) === null || _c === void 0 ? void 0 : _c.once('message', (childPort) => {
         metricsRunner(metric, url, path).then((metricResult) => {
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: metricResult });
             childPort.hereIsYourPort.close();
         }).catch((error) => {
-            console.error(error);
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: [-1, -1] });
             childPort.hereIsYourPort.close();
         });
     });
 }
-exports.default = computeMetrics;
