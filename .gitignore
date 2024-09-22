@@ -10,3 +10,4 @@ cov_out.txt
 coverage_output.txt
 NUL
 test_cov.json
+/coverage
