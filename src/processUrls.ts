@@ -96,10 +96,10 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
  */
 async function cloneRepo(githubUrl: string, targetDir: string): Promise<void>  {
     const git = simpleGit();
-    await handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
+    // await handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
     try {
         await git.clone(githubUrl, targetDir);
-        await handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
+        // await handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
     } catch (error) {
         throw new Error(`Failed to clone ${githubUrl}\nError message : ${error}`);
     }
@@ -116,7 +116,7 @@ export async function processURLs(filePath: string): Promise<void> {
         const urls = await readURLFile(filePath);
         let i = 1;
         for (const url of urls) {
-            await handleOutput(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
+            // await handleOutput(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl)
             {
@@ -128,19 +128,13 @@ export async function processURLs(filePath: string): Promise<void> {
                     await cloneRepo(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`);
                     await computeMetrics(githubUrl.toString(), `./cloned_repos/${owner} ${packageName}`)
                             .then(async result=>{
-                                /* First tell TS that resultOgj (made from result) can be indexed with a string */
                                 const resultObj = result as Record<string, unknown>; 
-                                let formatResult = 'Metrics Results :\n';
-                                for (const key in resultObj){
-                                    if (typeof resultObj[key] === 'number' && resultObj[key] % 1 !== 0){
-                                        /* Truncate floating number after 3 decimal points  */
-                                        formatResult += ` + ${key} : ${resultObj[key].toFixed(3)}\n`;
-                                    }
-                                    else{
-                                        formatResult += ` + ${key} : ${resultObj[key]}\n`;
+                                for (const [key, value] of Object.entries(resultObj)) {
+                                    if (typeof value === 'number' && value % 1 !== 0) {
+                                        resultObj[key] = Math.round(value * 1000) / 1000;
                                     }
                                 }
-                                await handleOutput(formatResult, '');
+                                await handleOutput(JSON.stringify(resultObj), '');
                             })
                             .catch(async (error: unknown)=>{
                                 await handleOutput('', `Error computing metrics\nError message : ${error}`);
@@ -149,7 +143,6 @@ export async function processURLs(filePath: string): Promise<void> {
                 catch(error){
                     await handleOutput('', `Error handling url ${githubUrl}\nError message : ${error}`);
                 }
-                await handleOutput('-'.repeat(80), '');
             }
             else
             {
@@ -166,10 +159,28 @@ export async function processURLs(filePath: string): Promise<void> {
 if (require.main === module) {
     const filePath = process.argv[2];
     if (!filePath) {
-        handleOutput('', 'No file path given. Please provide a URL file path as an argument.')
+        winston.log('debug', 'No file path given. Please provide a URL file path as an argument.');
         process.exit(1);
     }
-    processURLs(filePath);
+
+    processURLs(filePath)
+    .then(async () => {
+        winston.log('info', 'Finished processing URLs.');
+    })
+    .catch(async (error) => {
+        winston.log('debug', 'Error processing URLs: ${error}');
+        process.exit(1);
+    })
+    .finally(() => {
+        const cloned_repos = 'cloned_repos';
+        fs.promises.rm(cloned_repos, { recursive: true, force: true }) // Deletes the directory and its contents
+            .then(() => {
+                winston.log('info', 'Deleted cloned repositories directory: ${cloned_repos}');
+            })
+            .catch((error) => {
+                winston.log('debug', 'Failed to delete cloned_repos directory: ${error}');
+            });
+    });
 }
 
 export default processURLs;
