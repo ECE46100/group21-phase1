@@ -533,6 +533,14 @@ export async function license(packageUrl: string, packagePath: string): Promise<
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
+        const url = `https://api.github.com/repos/${owner}/${packageName}/git/trees/master?recursive=1`;
+        const response = await axios.get(url, {
+            headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+            }
+        });
+        console.log(response.data);
         score = 1;
     }
     catch (error) {
