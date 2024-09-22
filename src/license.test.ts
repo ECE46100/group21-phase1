@@ -1,6 +1,5 @@
 import  { license, license_thru_files } from './metrics';
 
-
 describe('metrics.ts', () => {
     describe('license', () => {
         test('should return score 1 for a repo with a valid license using GitHub license REST API', async () => {

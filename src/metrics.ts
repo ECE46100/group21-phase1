@@ -553,10 +553,15 @@ async function License(packageUrl: string, packagePath: string): Promise<number>
     let score = 0;
 
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+    winston.log('debug', "owner: " + owner + " packageName: " + packageName);
 
     try {
+        winston.log('info', "Trying to get license from GitHub API");
+
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
-        const url = `https://api.github.com/repos/${owner}/${packageName}/License`;
+
+        const url = `https://api.github.com/repos/${owner}/${packageName}/license`;
+        winston.log('debug', "GitHub License API url: " + url);
 
         const response = await axios.get(url, {
             headers: {
@@ -564,22 +569,33 @@ async function License(packageUrl: string, packagePath: string): Promise<number>
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
+
+        winston.log('debug', "response: " + JSON.stringify(response.data));
+
         if (response.data.license?.spdx_id == 'LGPL-2.1' || response.data.license?.spdx_id == 'LGPL-2.1-only' || response.data.license?.spdx_id == 'MIT') {
+            winston.log('info', "Got license from GitHub API");
             score = 1;
+            winston.log('debug', "github api success, score: " + score.toString());
         }
     }
     catch (error) {
+        winston.log('debug', "github api fail, calling license_file_runner");
         score = await license_file_runner(owner, packageName);
         if (score == 0 && error instanceof Error) {
+            winston.log('debug', "license_file_runner fail, score: " + score.toString());
             console.error(`Error calculating licenseMetric: ${error.message}`);
         } else if (score == 0) {
+            winston.log('debug', "license_file_runner fail, score: " + score.toString());
             console.error('Error calculating licenseMetric:', error);
         }
+        winston.log('debug', "returning score: " + score.toString());
         return score;
     }
     if(score == 0) {
+        winston.log('debug', "github api success but no results, calling license_file_runner");
         score = await license_file_runner(owner, packageName);
     }
+    winston.log('debug', "returning score: " + score.toString());
     return score;
 }
 
@@ -593,14 +609,21 @@ async function License(packageUrl: string, packagePath: string): Promise<number>
 
 async function license_file_runner(owner: string, packageName: string): Promise<number> {
     let score = 0;
+    winston.log('info', "Trying to get license from package.json");
+    winston.log('debug', "passing package.json to license_thru_files");
     score = await license_thru_files(owner, packageName, 'package.json')
     if (score == 0) {
+        winston.log('info', "Trying to get license from README.md");
+        winston.log('debug', "passing README.md to license_thru_files");
         score = await license_thru_files(owner, packageName, 'README.md');
     }
     if (score == 0) {
+        winston.log('info', "Trying to get license from LICENSE");
+        winston.log('debug', "passing LICENSE to license_thru_files");
         score = await license_thru_files(owner, packageName, 'LICENSE');
     }
 
+    winston.log('debug', "returning license_file_runner score to license: " + score.toString());
     return score;
 }
 
@@ -616,34 +639,47 @@ async function license_thru_files(owner: string, packageName: string, filepath: 
     let score = 0;
     try {
         const url = `https://api.github.com/repos/${owner}/${packageName}/contents/${filepath}`;
+        winston.log('debug', "GitHub File Content API url: " + url);
         const response = await axios.get(url, {
             headers: {
                 Accept: 'application/vnd.github+json',
                 Authorization: `Bearer ${GITHUB_TOKEN}`,
             }
         });
+        winston.log('debug', "response: " + JSON.stringify(response.data));
+
         const result = atob(response.data.content);
+        winston.log('debug', "result/file content: " + result);
 
         if (filepath == 'package.json') {
+            winston.log('debug', "parsing package.json content: " + result);
             const json_result = JSON.parse(result);
             if (json_result.license == "MIT" || json_result.license == "LGPL-2.1" || json_result.license == "LGPL-2.1-only") {
                 score = 1;
+                winston.log('debug', "license found in package.json, score: " + score.toString());
             }
         }
         if (filepath == 'README.md') {
+            winston.log('debug', "parsing README.md content: " + result);
             if (result.includes('MIT License') || result.includes('MIT license') || result.includes('LGPL-2.1 License')) {
                 score = 1;
+                winston.log('debug', "license found in README.md, score: " + score.toString());
             }
         }
         if (filepath == 'LICENSE') {
+            winston.log('debug', "parsing LICENSE content: " + result);
             if (result.includes('MIT License') || result.includes('MIT license') || result.includes('LGPL-2.1 License')) {
                 score = 1;
+                winston.log('debug', "license found in LICENSE, score: " + score.toString());
             }
         }
     }
     catch (error) {
+        winston.log('debug', "api GET to get file content failed, error: " + error);
+        winston.log('debug', "returning license_thru_files score to license_file_runner: " + score.toString());
         return score;
     }
+    winston.log('debug', "returning license_thru_files score to license_file_runner: " + score.toString());
     return score;
 }
 

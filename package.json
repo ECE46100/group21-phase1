@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "npx tsc",
     "test": "jest --testPathPattern=src/",
     "test:coverage": "jest --testPathPattern=src/ --coverage"
   },
