@@ -42,10 +42,10 @@ const metrics: metricFunction[] = [
     maintainerActiveness,
     rampUpTime,
     correctness,
-    
+    license,
 ];
 
-const weights: Record<string, number> = { busFactor: 0.25, maintainerActiveness: 0.2, correctness: 0.35, rampUpTime: 0.2 };
+const weights: Record<string, number> = { busFactor: 0.25, license: 0.25, maintainerActiveness: 0.2, correctness: 0.1, rampUpTime: 0.2 };
 
 /**
  * @interface metricPair
@@ -389,7 +389,7 @@ async function linting(packagePath: string): Promise<number> {
             const lintScore = 1 - (errorCount / filesLinted / 10);
             resolve(lintScore);
         }).catch((error: unknown) => {
-            reject(new Error(`Error running ESLint: ${error}`));
+            reject(new Error(`${error}`));
         });
     });
 }
@@ -402,9 +402,6 @@ async function linting(packagePath: string): Promise<number> {
  * @returns {Promise<number>} - The score for ramp-up time between 0 and 1.
  */
 async function rampUpTime(packageUrl: string, packagePath: string): Promise<number> {
-    const fs = require('fs');
-    const path = require('path');
-    
     /* Analyze README, can either make readmeScore 0 if there's error or simply throw an error and skip the rampUpTime function */
     const readmePath = findReadmeFile(packagePath);
     let readmeScore = 0;
@@ -472,8 +469,6 @@ function findReadmeFile(dir: string): string | null {
  * @returns {string[]} - A list of file paths.
  */
 function getAllCodeFiles(dir: string): string[] {
-    const fs = require('fs');
-    const path = require('path');
     let codeFiles: string[] = [];
 
     const files = fs.readdirSync(dir);
@@ -504,7 +499,6 @@ function getAllCodeFiles(dir: string): string[] {
  * @returns {{commentLines: number, totalLines: number}} - The number of comment lines and total lines of code.
  */
 function analyzeCodeComments(files: string[]): { commentLines: number, totalLines: number } {
-    const fs = require('fs');
     let commentLines = 0;
     let totalLines = 0;
 
@@ -524,6 +518,45 @@ function analyzeCodeComments(files: string[]): { commentLines: number, totalLine
     return { commentLines, totalLines };
 }
 
+/**
+ * @function license
+ * @description A metric that calculates if the package has a conforming LGPLv2.1 license
+ * @param {string} packageUrl - The GitHub repository URL.
+ * @param {string} packagePath - (Not used here, but required for type compatibility).
+ * @returns {Promise<number>} - The score for busFactor, calculated as int(isCompatible(license, LGPLv2.1))
+ */
+
+async function license(packageUrl: string, packagePath: string): Promise<number> {
+
+    let score = 0;
+
+    const[owner, packageName] = getOwnerAndPackageName(packageUrl);
+
+    try {
+        if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
+        const url = `https://api.github.com/repos/${owner}/${packageName}/license`;
+
+        const response = await axios.get(url, {
+            headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+            }
+        });
+
+        if (response.data.license?.spdx_id == 'LGPL-2.1' || response.data.license?.spdx_id == 'LGPL-2.1-only' || response.data.license?.spdx_id == 'MIT') {
+            score = 1;
+        }
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            console.error(`Error calculating licenseMetric: ${error.message}`);
+        } else {
+            console.error('Error calculating licenseMetric:', error);
+        }
+        return 0;
+    }
+    return score;
+}
 
 if (!threading.isMainThread) {
     const { metricIndex, url, path } = threading.workerData as { metricIndex: number, url: string, path: string };
@@ -533,12 +566,10 @@ if (!threading.isMainThread) {
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: metricResult });
             childPort.hereIsYourPort.close();
         }).catch((error: unknown) => {
-            console.error(error);
             childPort.hereIsYourPort.postMessage({ metricName: metric.name, result: [-1, -1] });
             childPort.hereIsYourPort.close();
         });
     });
-    
 }
 
-export default computeMetrics;
+export { computeMetrics, correctness, linting, dependencyAnalysis, rampUpTime, license, busFactor, maintainerActiveness };

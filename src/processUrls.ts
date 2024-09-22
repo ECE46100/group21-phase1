@@ -4,7 +4,7 @@ import simpleGit from 'simple-git';
 import axios from 'axios';
 import { URL } from 'url';
 import { handleOutput } from './util';
-import computeMetrics from './metrics';
+import { computeMetrics } from './metrics';
 import * as winston from 'winston';
 import * as dotenv from 'dotenv';
 
