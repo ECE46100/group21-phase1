@@ -120,12 +120,11 @@ async function processURLs(filePath: string): Promise<void> {
         const urls = await readURLFile(filePath);
         let i = 1;
         for (const url of urls) {
-            // await handleOutput(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl)
             {
                 const pathSegments = githubUrl.pathname.split('/').filter(Boolean);
-                if (pathSegments.length != 2) throw new Error(`Not a repo url : ${pathSegments.toString()}`);
+                if (pathSegments.length != 2) await handleOutput('', `Not a repo url : ${pathSegments.toString()}`);
                 const owner = pathSegments[0];
                 const packageName = pathSegments[1].replace('.git', '');
                 try{
@@ -150,12 +149,11 @@ async function processURLs(filePath: string): Promise<void> {
             }
             else
             {
-                throw new Error('GitHub URL is null.');
+                await handleOutput('', 'GitHub URL is null.');
             }
         }
     } catch (error) {
         await handleOutput('', `Error processing the URL file\nError message : ${error}`);
-        // await handleOutput('-'.repeat(50), '');
     }
 }
 

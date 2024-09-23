@@ -10,7 +10,7 @@ import * as path from 'path';
 import { cpus } from 'os';
 import { spawn } from 'child_process';
 import axios from 'axios';
-import { handleOutput, getOwnerAndPackageName } from './util';
+import { getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
 import { ESLint } from 'eslint';
 import * as fs from 'fs';
@@ -185,7 +185,6 @@ async function countIssue(owner: string, repo: string, state: string): Promise<n
         }
         return response.data.length;
     } catch (error) {
-        // console.error(`Error fetching ${state} issues for ${owner}/${repo}:`, error);
         return 0;
     }
 }
@@ -269,7 +268,6 @@ async function BusFactor(packageUrl: string, packagePath: string): Promise<numbe
 
         return score;
     } catch (error) {
-        console.error(`Error calculating activeContributorsMetric: ${error}`);
         return 0;
     }
 }
@@ -429,11 +427,9 @@ async function RampUp(packageUrl: string, packagePath: string): Promise<number> 
             const readmeContent = fs.readFileSync(readmePath, 'utf-8');
             readmeScore = readmeContent.length > 1500 ? 1 : (readmeContent.length > 1000 ? 0.75 : (readmeContent.length > 500 ? 0.5 : 0.25));
         } catch (error) {
-            //console.error("Error reading README file", error);
             readmeScore = 0;
         }
     } else {
-        // console.warn('No README found in the repository');
         readmeScore = 0;
     }
 
@@ -466,7 +462,6 @@ function findReadmeFile(dir: string): string | null {
 
         if (stat.isSymbolicLink()) {
             // Skip symbolic links to avoid loops
-            //console.warn(`Skipping symbolic link: ${fullPath}`);
             continue;
         }
 
@@ -497,7 +492,6 @@ function getAllCodeFiles(dir: string): string[] {
         const stat = fs.lstatSync(fullPath);
 
         if (stat.isSymbolicLink()) {
-            //console.warn(`Skipping symbolic link: ${fullPath}`);
             continue;
         }
 
@@ -580,10 +574,8 @@ async function License(packageUrl: string, packagePath: string): Promise<number>
         score = await license_file_runner(owner, packageName);
         if (score == 0 && error instanceof Error) {
             winston.log('debug', "license_file_runner fail, score: " + score.toString());
-            console.error(`Error calculating licenseMetric: ${error.message}`);
         } else if (score == 0) {
             winston.log('debug', "license_file_runner fail, score: " + score.toString());
-            console.error('Error calculating licenseMetric:', error);
         }
         winston.log('debug', "returning score: " + score.toString());
         return score;
