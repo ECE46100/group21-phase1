@@ -63,7 +63,7 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
         else if (parsedUrl.hostname === 'www.npmjs.com') {
             const packageName = parsedUrl.pathname.split('/').pop();
             if (!packageName) {
-                handleOutput('', `Invalid npm URL: ${urlString}`);
+                // handleOutput('', `Invalid npm URL: ${urlString}`);
                 return null;
             }
 
@@ -74,19 +74,19 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
                 if (repoUrl && repoUrl.includes('github.com')) {
                     const githubUrl = new URL(repoUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/'));
                     githubUrl.pathname += '.git';
-                    handleOutput(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
+                    // handleOutput(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
                     return githubUrl;
                 } else {
-                    handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
+                    // handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
                 }
             } catch (error) {
-                handleOutput('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
+                // handleOutput('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
             }
         } else {
-            handleOutput('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
+            // handleOutput('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
         }
     } catch (error) {
-        handleOutput('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
+        // handleOutput('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
     }
     return null;
 }
@@ -102,7 +102,7 @@ async function cloneRepo(githubUrl: string, targetDir: string): Promise<void>  {
     const git = simpleGit();
     // await handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
     try {
-        await git.clone(githubUrl, targetDir);
+        await git.clone(githubUrl, targetDir, ["--depth", "1"]);
         // await handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
     } catch (error) {
         throw new Error(`Failed to clone ${githubUrl}\nError message : ${error}`);
@@ -115,7 +115,7 @@ async function cloneRepo(githubUrl: string, targetDir: string): Promise<void>  {
  * @param {string} filePath - The path to the file containing URLs.
  * @returns {Promise<void>}
 */
-export async function processURLs(filePath: string): Promise<void> {
+async function processURLs(filePath: string): Promise<void> {
     try {
         const urls = await readURLFile(filePath);
         let i = 1;
@@ -155,7 +155,7 @@ export async function processURLs(filePath: string): Promise<void> {
         }
     } catch (error) {
         await handleOutput('', `Error processing the URL file\nError message : ${error}`);
-        await handleOutput('-'.repeat(50), '');
+        // await handleOutput('-'.repeat(50), '');
     }
 }
 
@@ -187,4 +187,5 @@ if (require.main === module) {
     });
 }
 
-export default processURLs;
+// export default processURLs;
+export {readURLFile, classifyAndConvertURL, cloneRepo, processURLs}
