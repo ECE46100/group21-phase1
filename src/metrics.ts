@@ -199,6 +199,7 @@ async function countIssue(owner: string, repo: string, state: string): Promise<n
  *                           if no issue was found it returns 1.
  */
 async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Promise<number> {
+    winston.log('info', "Calculating ResponsiveMaintainer metric");
     let score = 0;
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
@@ -207,7 +208,8 @@ async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Pr
         const openIssues = await countIssue(owner, packageName, 'open');
 
         if (totalIssues === 0) {
-            return 1; /* No issue at all, the score here can be changed later */
+            winston.log('info', "In ResponsiveMaintainer metric found no issue for this repo");
+            return 0; /* No issue at all, not an active repo */
         }
 
         score = 1 - (openIssues / totalIssues);
@@ -215,6 +217,7 @@ async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Pr
         throw new Error(`Error calculating maintaine activeness\nError message : ${error}`)
     }
 
+    winston.log('info', `ResponsiveMaintainer metric score = ${score.toString()}`);
     return score;
 }
 
@@ -226,6 +229,7 @@ async function ResponsiveMaintainer(packageUrl: string, packagePath: string): Pr
  * @returns {Promise<number>} - The score for BusFactor, calculated as max(1, (#contributors who made 5+ commits last year / 10))
  */
 async function BusFactor(packageUrl: string, packagePath: string): Promise<number> {
+    winston.log('info', "Calculating BusFactor metric");
     const[owner, packageName] = getOwnerAndPackageName(packageUrl);
     try {
         if (GITHUB_TOKEN == '') throw new Error('No GitHub token specified');
@@ -261,6 +265,7 @@ async function BusFactor(packageUrl: string, packagePath: string): Promise<numbe
         /* Filter contributors with 5+ commits */
         const activeContributors = Object.values(contributorCommits).filter(commitCount => commitCount >= 1).length;
         const score = activeContributors >= 10 ? 1 : activeContributors / 10;
+        winston.log('info', `BusFactor metric score ${score.toString()}`);
 
         return score;
     } catch (error) {
@@ -689,4 +694,4 @@ if (!threading.isMainThread) {
     });
 }
 
-export { computeMetrics, Correctness, linting, dependencyAnalysis, RampUp, License, BusFactor, ResponsiveMaintainer, license_thru_files };
+export { computeMetrics, Correctness, linting, dependencyAnalysis, RampUp, License, BusFactor, ResponsiveMaintainer, license_thru_files, countIssue };
