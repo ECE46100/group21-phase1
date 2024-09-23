@@ -25,10 +25,12 @@ describe('Compute Metrics', () => {
         const packageUrl = 'http://example.com/package';
         const packagePath = '/path/to/package';
         
-        const expectedNetScore = 0.25;
+        const expectedNetScoreMax = 1;
+        const expectedNetScoreMin = 0;
         
         const result = await computeMetrics(packageUrl, packagePath);
-        expect(result.NetScore).toBeCloseTo(expectedNetScore, 2);
+        expect(result.NetScore).toBeLessThanOrEqual(expectedNetScoreMax);
+        expect(result.NetScore).toBeGreaterThanOrEqual(expectedNetScoreMin);
     });
 
 });

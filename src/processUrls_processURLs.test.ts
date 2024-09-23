@@ -1,68 +1,34 @@
-// src/processUrls_processURLs.test.ts
-import { processURLs } from './processUrls'; // Adjust the import path as necessary
+import { processURLs } from './processUrls';
+import { computeMetrics } from './metrics';
+import fs from 'fs';
 
-jest.mock('./processUrls', () => ({
-    readURLFile: jest.fn(),
-    classifyAndConvertURL: jest.fn(),
-    cloneRepo: jest.fn(),
-    computeMetrics: jest.fn(),
+// make compute metrics do nothing
+jest.mock('./metrics', () => ({
+    computeMetrics: jest.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+            resolve({});
+        });
+    }),
 }));
 
-const mockedFunctions = require('./processUrls'); // Require the mocked functions
-
 describe('processURLs', () => {
-    const filePath = 'path/to/urls.txt';
-    const validUrls = ['https://github.com/owner/repo.git'];
-    const invalidUrls = ['invalid-url'];
-
     beforeEach(() => {
-        jest.clearAllMocks(); // Clear mocks before each test
+        jest.clearAllMocks();
     });
+    test('should process URLs correctly and capture print statements', async () => {
+        const filePath = 'src/one_url.txt';
 
-    it('should handle errors when reading the URL file fails', async () => {
-        mockedFunctions.readURLFile.mockRejectedValueOnce(new Error('File not found'));
+        // Call the function
+        await processURLs(filePath).then(() => {
+            expect(fs.existsSync('cloned_repos/cloudinary cloudinary_npm')).toBe(true);
+        });
 
-        await processURLs(filePath);
+        // Check that the function did not throw any error
+        expect(processURLs(filePath)).resolves.not.toThrow();
+        
 
-        // expect(mockedFunctions.handleOutput).toHaveBeenCalledWith('', expect.stringContaining('Error processing the URL file\nError message : Error: File not found'));
-    });
-
-    it('should handle errors when classifying and converting URL fails', async () => {
-        mockedFunctions.readURLFile.mockResolvedValueOnce(validUrls);
-        mockedFunctions.classifyAndConvertURL.mockRejectedValueOnce(new Error('Invalid URL'));
-
-        await processURLs(filePath);
-
-        // expect(mockedFunctions.handleOutput).toHaveBeenCalledWith('', expect.stringContaining('Error processing the URL file\nError message : Error: Invalid URL'));
-    });
-
-    it('should handle errors when cloning the repository fails', async () => {
-        mockedFunctions.readURLFile.mockResolvedValueOnce(validUrls);
-        mockedFunctions.classifyAndConvertURL.mockResolvedValueOnce(new URL('https://github.com/owner/repo.git'));
-        mockedFunctions.cloneRepo.mockRejectedValueOnce(new Error('Clone failed'));
-
-        await processURLs(filePath);
-
-        // expect(mockedFunctions.handleOutput).toHaveBeenCalledWith('', expect.stringContaining('Error handling url https://github.com/owner/repo.git\nError message : Error: Clone failed'));
-    });
-
-    it('should handle errors when computing metrics fails', async () => {
-        mockedFunctions.readURLFile.mockResolvedValueOnce(validUrls);
-        mockedFunctions.classifyAndConvertURL.mockResolvedValueOnce(new URL('https://github.com/owner/repo.git'));
-        mockedFunctions.cloneRepo.mockResolvedValueOnce(null);
-        mockedFunctions.computeMetrics.mockRejectedValueOnce(new Error('Metrics computation error'));
-
-        await processURLs(filePath);
-
-        // expect(mockedFunctions.handleOutput).toHaveBeenCalledWith('', expect.stringContaining('Error computing metrics\nError message : Error: Metrics computation error'));
-    });
-
-    it('should handle null GitHub URLs', async () => {
-        mockedFunctions.readURLFile.mockResolvedValueOnce([invalidUrls[0]]);
-        mockedFunctions.classifyAndConvertURL.mockResolvedValueOnce(null);
-
-        await processURLs(filePath);
-
-        // expect(mockedFunctions.handleOutput).toHaveBeenCalledWith('', expect.stringContaining('Error processing the URL file\nError message : Error: GitHub URL is null.'));
+        // Clean up cloned repositories after the test
+        const cloned_repos = 'cloned_repos';
+        await fs.promises.rm(cloned_repos, { recursive: true, force: true });
     });
 });
