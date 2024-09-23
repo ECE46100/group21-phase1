@@ -3,7 +3,7 @@
 # Function to install dependencies (sort of)
 install() {
     echo -e "start installing dependencies...\\n"
-    npm install
+    npm install > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         echo "Dependencies installed successfully."
         exit 0
