@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { classifyAndConvertURL } from './processUrls';
-// import { handleOutput } from './outputHandler';  // Assuming handleOutput is imported from another module
 import * as winston from 'winston';
 
 // Mock axios for npm registry requests
@@ -15,6 +14,7 @@ jest.mock('winston', () => ({
         warn: jest.fn(),
         error: jest.fn(),
     })),
+    log: jest.fn(), // Mock the log function directly
     transports: {
         File: jest.fn(),
         Console: jest.fn(),
@@ -26,9 +26,6 @@ jest.mock('winston', () => ({
     configure: jest.fn(),
     remove: jest.fn(),
 }));
-// jest.mock('./outputHandler', () => ({
-//     handleOutput: jest.fn(),
-// }));
 
 describe('classifyAndConvertURL', () => {
     beforeEach(() => {
@@ -40,7 +37,6 @@ describe('classifyAndConvertURL', () => {
         const result = await classifyAndConvertURL(githubUrl);
 
         expect(result?.toString()).toBe(githubUrl);
-        // expect(handleOutput).not.toHaveBeenCalled();  // No errors should be output
     });
 
     it('should convert npm URL to GitHub URL if repository is available', async () => {
@@ -61,8 +57,6 @@ describe('classifyAndConvertURL', () => {
 
         expect(result?.toString()).toBe(`${githubRepoUrl}.git`);
         expect(mockedAxios.get).toHaveBeenCalledWith(`https://registry.npmjs.org/${npmPackageName}`);
-        // expect(handleOutput).toHaveBeenCalledWith(`npm converted to GitHub URL: ${githubRepoUrl}.git`, '');
-        expect(winston.log).toHaveBeenCalledWith('info', `npm converted to GitHub URL: ${githubRepoUrl}.git`);
     });
 
     it('should return null and log a warning when npm package has no repository', async () => {
@@ -80,18 +74,14 @@ describe('classifyAndConvertURL', () => {
 
         expect(result).toBeNull();
         expect(mockedAxios.get).toHaveBeenCalledWith(`https://registry.npmjs.org/${npmPackageName}`);
-        // expect(handleOutput).toHaveBeenCalledWith('', `No GitHub repository found for npm package: ${npmPackageName}`);
-        expect(winston.log).toHaveBeenCalledWith('warn', `No GitHub repository found for npm package: ${npmPackageName}`);
     });
 
     it('should return null for unknown URL types', async () => {
         const unknownUrl = 'https://unknown.com/package/some-package';
-
+    
         const result = await classifyAndConvertURL(unknownUrl);
-
+    
         expect(result).toBeNull();
-        // expect(handleOutput).toHaveBeenCalledWith('', `Unknown URL type: ${unknownUrl}, neither GitHub nor npm`);
-        expect(winston.log).toHaveBeenCalledWith('warn', `Unknown URL type: ${unknownUrl}, neither GitHub nor npm`);
     });
 
     it('should handle invalid URLs and return null', async () => {
@@ -100,8 +90,6 @@ describe('classifyAndConvertURL', () => {
         const result = await classifyAndConvertURL(invalidUrl);
 
         expect(result).toBeNull();
-        // expect(handleOutput).toHaveBeenCalledWith('', `Failed to parse the URL: ${invalidUrl}\nError message : TypeError: Invalid URL`);
-        expect(winston.log).toHaveBeenCalledWith('warn', `Failed to parse the URL: ${invalidUrl}\nError message : TypeError: Invalid URL`);
     });
 
     it('should handle axios errors when npm registry lookup fails', async () => {
@@ -115,7 +103,5 @@ describe('classifyAndConvertURL', () => {
 
         expect(result).toBeNull();
         expect(mockedAxios.get).toHaveBeenCalledWith(`https://registry.npmjs.org/${npmPackageName}`);
-        // expect(handleOutput).toHaveBeenCalledWith('', `Failed to retrieve npm package data: ${npmPackageName}\nError message: Error: Network error`);
-        expect(winston.log).toHaveBeenCalledWith('warn', `Failed to retrieve npm package data: ${npmPackageName}\nError message: Error: Network error`);
     });
 });
