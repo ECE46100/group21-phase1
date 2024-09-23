@@ -6,7 +6,7 @@ A Command-Line Interface (CLI) tool designed for analyzing URLs in text files.
 
 1. **Clone this repository:**
    ```bash
-   git clone https://github.com/your-repo/url-analyzer-cli.git
+   git clone https://github.com/ECE46100/group21-phase1.git
 2. **Install the necessary dependencies:**
    ```bash
    ./run install
