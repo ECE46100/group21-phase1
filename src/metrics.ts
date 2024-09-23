@@ -10,7 +10,7 @@ import * as path from 'path';
 import { cpus } from 'os';
 import { spawn } from 'child_process';
 import axios from 'axios';
-import { handleOutput, getOwnerAndPackageName } from './util';
+import { getOwnerAndPackageName } from './util';
 import * as dotenv from 'dotenv';
 import { ESLint } from 'eslint';
 import * as fs from 'fs';

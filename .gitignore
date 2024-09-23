@@ -12,3 +12,10 @@ NUL
 test_cov.json
 /coverage
 /dist
+coverage.txt
+output.json
+src log.txt
+test_cov.txt
+test_coverage.json
+test_results.txt
+/src/log.txt

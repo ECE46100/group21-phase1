@@ -3,7 +3,6 @@ import * as readline from 'readline';
 import simpleGit from 'simple-git';
 import axios from 'axios';
 import { URL } from 'url';
-import { handleOutput } from './util';
 import { computeMetrics } from './metrics';
 import * as winston from 'winston';
 import * as dotenv from 'dotenv';
@@ -63,7 +62,7 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
         else if (parsedUrl.hostname === 'www.npmjs.com') {
             const packageName = parsedUrl.pathname.split('/').pop();
             if (!packageName) {
-                handleOutput('', `Invalid npm URL: ${urlString}`);
+                winston.log('debug', `Invalid npm URL: ${urlString}`);
                 return null;
             }
 
@@ -74,19 +73,19 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
                 if (repoUrl && repoUrl.includes('github.com')) {
                     const githubUrl = new URL(repoUrl.replace(/^git\+/, '').replace(/\.git$/, '').replace('ssh://git@github.com/', 'https://github.com/'));
                     githubUrl.pathname += '.git';
-                    handleOutput(`npm converted to GitHub URL: ${githubUrl.toString()}`, '');
+                    winston.log('debug',`npm converted to GitHub URL: ${githubUrl.toString()}`);
                     return githubUrl;
                 } else {
-                    handleOutput('', `No GitHub repository found for npm package: ${packageName}`);
+                    winston.log('debug', `No GitHub repository found for npm package: ${packageName}`);
                 }
             } catch (error) {
-                handleOutput('', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
+                winston.log('debug', `Failed to retrieve npm package data: ${packageName}\nError message: ${error}`);
             }
         } else {
-            handleOutput('', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
+            winston.log('debug', `Unknown URL type: ${urlString}, neither GitHub nor npm`);
         }
     } catch (error) {
-        handleOutput('', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
+        winston.log('debug', `Failed to parse the URL: ${urlString}\nError message : ${error}`);
     }
     return null;
 }
@@ -100,10 +99,10 @@ async function classifyAndConvertURL(urlString: string): Promise<URL | null> {
  */
 async function cloneRepo(githubUrl: string, targetDir: string): Promise<void>  {
     const git = simpleGit();
-    // await handleOutput(`Cloning GitHub repo: ${githubUrl}`, '');
+    winston.log('info',`Cloning GitHub repo: ${githubUrl}`);
     try {
         await git.clone(githubUrl, targetDir);
-        // await handleOutput(`Cloned ${githubUrl} successfully.\n`, '');
+        winston.log('info',`Cloned ${githubUrl} successfully.\n`);
     } catch (error) {
         throw new Error(`Failed to clone ${githubUrl}\nError message : ${error}`);
     }
@@ -120,7 +119,7 @@ export async function processURLs(filePath: string): Promise<void> {
         const urls = await readURLFile(filePath);
         let i = 1;
         for (const url of urls) {
-            // await handleOutput(`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`, '');
+            winston.log('debug',`Processing URLs (${(i++).toString()}/${(urls.length).toString()}) --> ${url}`);
             const githubUrl = await classifyAndConvertURL(url);
             if (githubUrl)
             {
@@ -138,14 +137,14 @@ export async function processURLs(filePath: string): Promise<void> {
                                         resultObj[key] = Math.round(value * 1000) / 1000;
                                     }
                                 }
-                                await handleOutput(JSON.stringify(resultObj), '');
+                                winston.log('debug',JSON.stringify(resultObj));
                             })
                             .catch(async (error: unknown)=>{
-                                await handleOutput('', `Error computing metrics\nError message : ${error}`);
+                                winston.log('info', `Error computing metrics\nError message : ${error}`);
                             })
                 }
                 catch(error){
-                    await handleOutput('', `Error handling url ${githubUrl}\nError message : ${error}`);
+                    winston.log('info', `Error handling url ${githubUrl}\nError message : ${error}`);
                 }
             }
             else
@@ -154,8 +153,8 @@ export async function processURLs(filePath: string): Promise<void> {
             }
         }
     } catch (error) {
-        await handleOutput('', `Error processing the URL file\nError message : ${error}`);
-        await handleOutput('-'.repeat(50), '');
+        winston.log('debug', `Error processing the URL file\nError message : ${error}`);
+        winston.log('debug','-'.repeat(50));
     }
 }
 
@@ -168,11 +167,11 @@ if (require.main === module) {
     }
 
     processURLs(filePath)
-    .then(async () => {
+    .then(() => {
         winston.log('info', 'Finished processing URLs.');
     })
-    .catch(async (error) => {
-        winston.log('debug', 'Error processing URLs: ${error}');
+    .catch((error) => {
+        winston.log('debug', 'Error processing URLs:', error);
         process.exit(1);
     })
     .finally(() => {
@@ -182,7 +181,7 @@ if (require.main === module) {
                 winston.log('info', 'Deleted cloned repositories directory: ${cloned_repos}');
             })
             .catch((error) => {
-                winston.log('debug', 'Failed to delete cloned_repos directory: ${error}');
+                winston.log('debug', 'Failed to delete cloned_repos directory:', error);
             });
     });
 }
